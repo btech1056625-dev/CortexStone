@@ -1,6 +1,6 @@
 # Cortexstone
 
-Cortexstone is a private assistant built around three product pillars: **Remember, Act, Protect**. This repository is organized as a modular monolith: domain modules share one codebase and explicit contracts, while the API, worker, and scheduler are separate runtime entry points that can be tested and deployed independently.
+Cortexstone is a private assistant built around three product pillars: **Remember, Act, Protect**. This repository is organized as a modular monolith: domain modules share one codebase and explicit contracts, while the API, worker, and scheduler are separate runtime entry points that can be tested and deployed independently
 
 ## Repository map
 
@@ -32,8 +32,9 @@ The README files in the scaffolded directories describe their intended responsib
 - [System Architecture, HLD & LLD](./Documentations/Cortexstone_Architecture_HLD_LLD.md)
 - [Agent Rules](./Documentations/AGENT_RULES.md)
 - [Design Rules](./Documentations/DESIGN_RULES.md)
-- [Team Integration Tasks](./Documentations/TEAM_INTEGRATION_TASKS.md)
 
 ## Implementation status
 
-This repository currently contains product documentation and an implementation-ready directory scaffold. Runtime code, dependency manifests, credentials, and deployment claims must be added and validated separately.
+The repository now includes a minimal FastAPI bootstrap, PostgreSQL/pgvector Compose development environment, and CI checks. Product workflows, database migrations, authentication, and production deployment are not implemented yet.
+
+See [development setup and API integration conventions](./docs/DEVELOPMENT.md) to start the local environment and run checks.
