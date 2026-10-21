@@ -32,6 +32,7 @@ The README files in the scaffolded directories describe their intended responsib
 - [System Architecture, HLD & LLD](./Documentations/Cortexstone_Architecture_HLD_LLD.md)
 - [Agent Rules](./Documentations/AGENT_RULES.md)
 - [Design Rules](./Documentations/DESIGN_RULES.md)
+- [Team Integration Tasks](./Documentations/TEAM_INTEGRATION_TASKS.md)
 
 ## Implementation status
 
