@@ -35,4 +35,10 @@ The README files in the scaffolded directories describe their intended responsib
 
 ## Implementation status
 
+<<<<<<< HEAD
 This repository currently contains product documentation and an implementation-ready directory scaffold. Runtime code, dependency manifests, credentials, and deployment claims must be added and validated separately
+=======
+The repository now includes a minimal FastAPI bootstrap, PostgreSQL/pgvector Compose development environment, and CI checks. Product workflows, database migrations, authentication, and production deployment are not implemented yet.
+
+See [development setup and API integration conventions](./docs/DEVELOPMENT.md) to start the local environment and run checks.
+>>>>>>> remotes/origin/feat/dev-env-routing

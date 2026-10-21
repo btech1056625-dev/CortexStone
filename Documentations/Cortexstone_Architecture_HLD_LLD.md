@@ -298,7 +298,7 @@ Never blindly retry a non-idempotent external write. Check provider operation ID
 |---|---|---|---|
 | Siddharth | Product Manager | Scope, journeys, priorities, acceptance, demo | Backlog, acceptance matrix, decision log, demo script |
 | Bhavya | Backend Developer / Infra (DevOps) | Architecture integration, FastAPI, deployment, CI/CD, config/secrets, health | Running environments, API integration, deploy files, runbooks |
-| Fonseca | QA Tester / Backend Developer | Test strategy, fixtures, integration/reliability tests, connector support | pytest suites, seeded fixtures, test reports, bug reproductions |
+| Fonseca | QA Tester / Backend Developer | Test strategy, fixtures, integration/reliability tests, connector support | pytest suites, seeded fixtures, test reports, bug reproductions |      
 | Archis Samanta | ML/DL — Agents Core | Model evaluation, prompts, context assembly, structured output | Model adapter/eval set, prompt/schema versions, quality report |
 | Himanshu | Agentic AI — Agents Core | Orchestration/planning, typed proposals, runtime adapter | Orchestrator, action contracts, bounded loop, agent tests |
 | Apurva | DB Admin — Memory | PostgreSQL/pgvector, migrations, retrieval, provenance, forget, backup | Schema/migrations, memory repository, retrieval benchmark |
