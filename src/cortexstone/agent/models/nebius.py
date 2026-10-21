@@ -5,26 +5,28 @@ Nebius Token Factory adapter supporting dual-model routing:
 - Nemotron Mini (Intent & Complexity Routing)
 - Nemotron 3 Super 120B A12B (Complex Reasoning & Planning)
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import time
 from typing import Any, TypeVar
+
 import httpx
 from pydantic import BaseModel, ValidationError
 
 from cortexstone.agent.models.interface import (
-    ModelClient,
-    ModelRole,
-    ModelMessage,
-    ModelResponse,
-    UsageMetadata,
-    ModelError,
-    ModelTimeoutError,
-    ModelRateLimitError,
     ModelAuthenticationError,
+    ModelClient,
+    ModelError,
+    ModelMessage,
+    ModelRateLimitError,
+    ModelResponse,
+    ModelRole,
     ModelSchemaValidationError,
+    ModelTimeoutError,
+    UsageMetadata,
 )
 
 logger = logging.getLogger("cortexstone.agent.models.nebius")
@@ -130,13 +132,19 @@ class NebiusTokenFactoryClient(ModelClient):
                 timeout=timeout,
             )
         except httpx.TimeoutException as exc:
-            logger.error("Inference timed out after %.1fs for model %s", timeout, chosen_model)
+            logger.error(
+                "Inference timed out after %.1fs for model %s", timeout, chosen_model
+            )
             raise ModelTimeoutError(
                 f"Nebius Token Factory request timed out after {timeout:.1f}s"
             ) from exc
         except httpx.RequestError as exc:
-            logger.error("Network error communicating with Nebius: %s", type(exc).__name__)
-            raise ModelError(f"Network error during model inference: {type(exc).__name__}") from exc
+            logger.error(
+                "Network error communicating with Nebius: %s", type(exc).__name__
+            )
+            raise ModelError(
+                f"Network error during model inference: {type(exc).__name__}"
+            ) from exc
         finally:
             if not self._external_client:
                 await client.aclose()
@@ -144,9 +152,13 @@ class NebiusTokenFactoryClient(ModelClient):
         latency_ms = (time.monotonic() - start_time) * 1000.0
 
         if resp.status_code in (401, 403):
-            raise ModelAuthenticationError("Nebius Token Factory authentication failed: invalid API key")
+            raise ModelAuthenticationError(
+                "Nebius Token Factory authentication failed: invalid API key"
+            )
         elif resp.status_code == 429:
-            raise ModelRateLimitError("Nebius Token Factory rate limit or quota exceeded (HTTP 429)")
+            raise ModelRateLimitError(
+                "Nebius Token Factory rate limit or quota exceeded (HTTP 429)"
+            )
         elif resp.status_code >= 400:
             raise ModelError(f"Nebius Token Factory error (HTTP {resp.status_code})")
 
@@ -192,7 +204,9 @@ class NebiusTokenFactoryClient(ModelClient):
         try:
             parsed_json = json.loads(clean_text)
         except json.JSONDecodeError as err:
-            logger.warning("Model returned invalid JSON for schema %s: %s", schema.__name__, err)
+            logger.warning(
+                "Model returned invalid JSON for schema %s: %s", schema.__name__, err
+            )
             raise ModelSchemaValidationError(
                 f"Model output is not valid JSON for {schema.__name__}: {err}"
             ) from err
@@ -200,7 +214,11 @@ class NebiusTokenFactoryClient(ModelClient):
         try:
             return schema.model_validate(parsed_json)
         except ValidationError as err:
-            logger.warning("Model output failed Pydantic validation for %s: %s", schema.__name__, err)
+            logger.warning(
+                "Model output failed Pydantic validation for %s: %s",
+                schema.__name__,
+                err,
+            )
             raise ModelSchemaValidationError(
                 f"Model output does not conform to schema {schema.__name__}: {err}"
             ) from err

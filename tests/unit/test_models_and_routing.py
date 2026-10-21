@@ -7,35 +7,34 @@ Unit tests for Archis Samanta's ML/DL components:
 - IntentRouter classification with Nemotron Mini
 - Policy invariance: Schemas forbid model-supplied authorization claims
 """
+
 from __future__ import annotations
 
 import unittest
-import uuid
+
 from pydantic import ValidationError
 
 from cortexstone.agent.models.interface import (
-    ModelRole,
-    Role,
     ModelMessage,
-    ModelTimeoutError,
+    ModelRole,
     ModelSchemaValidationError,
+    ModelTimeoutError,
+    Role,
 )
 from cortexstone.agent.models.mock import MockModelClient
 from cortexstone.agent.models.nebius import NebiusTokenFactoryClient
-from cortexstone.agent.schemas.routing import (
-    IntentCategory,
-    ComplexityLevel,
-    RouteDecision,
-)
+from cortexstone.agent.orchestration.router import IntentRouter
 from cortexstone.agent.schemas.actions import (
     ProposedAction,
-    AgentPlan,
 )
-from cortexstone.agent.orchestration.router import IntentRouter
+from cortexstone.agent.schemas.routing import (
+    ComplexityLevel,
+    IntentCategory,
+    RouteDecision,
+)
 
 
 class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
-
     async def test_mock_model_client_generation(self):
         client = MockModelClient(fixed_text="Hello from mock")
         messages = [ModelMessage(role=Role.USER, content="Hello")]
@@ -54,7 +53,9 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
             rationale="User is asking for past meeting notes",
         )
         client = MockModelClient(parsed_fixture=fixture)
-        messages = [ModelMessage(role=Role.USER, content="What did we discuss last week?")]
+        messages = [
+            ModelMessage(role=Role.USER, content="What did we discuss last week?")
+        ]
         response = await client.generate_for_role(
             role=ModelRole.ROUTER,
             messages=messages,
@@ -75,7 +76,9 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
             "rationale": "Create pull request requires external tool"
         }
         ```"""
-        validated = NebiusTokenFactoryClient._parse_and_validate(markdown_json, RouteDecision)
+        validated = NebiusTokenFactoryClient._parse_and_validate(
+            markdown_json, RouteDecision
+        )
         self.assertEqual(validated.intent, IntentCategory.TOOL_ACTION)
         self.assertEqual(validated.complexity, ComplexityLevel.HIGH)
         self.assertTrue(validated.needs_reasoner)
