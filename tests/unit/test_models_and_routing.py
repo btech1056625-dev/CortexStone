@@ -7,6 +7,7 @@ Unit tests for Archis Samanta's ML/DL components:
 - IntentRouter classification with Nemotron Mini
 - Policy invariance: Schemas forbid model-supplied authorization claims
 """
+
 from __future__ import annotations
 
 import unittest
@@ -35,7 +36,6 @@ from cortexstone.agent.orchestration.router import IntentRouter
 
 
 class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
-
     async def test_mock_model_client_generation(self):
         client = MockModelClient(fixed_text="Hello from mock")
         messages = [ModelMessage(role=Role.USER, content="Hello")]

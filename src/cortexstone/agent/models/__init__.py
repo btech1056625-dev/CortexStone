@@ -3,6 +3,7 @@ src/cortexstone/agent/models/__init__.py
 
 Public exports for the Cortexstone model subsystem.
 """
+
 from cortexstone.agent.models.interface import (
     ModelRole,
     Role,

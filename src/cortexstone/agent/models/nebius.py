@@ -5,6 +5,7 @@ Nebius Token Factory adapter supporting dual-model routing:
 - Nemotron Mini (Intent & Complexity Routing)
 - Nemotron 3 Super 120B A12B (Complex Reasoning & Planning)
 """
+
 from __future__ import annotations
 
 import json
@@ -144,9 +145,13 @@ class NebiusTokenFactoryClient(ModelClient):
         latency_ms = (time.monotonic() - start_time) * 1000.0
 
         if resp.status_code in (401, 403):
-            raise ModelAuthenticationError("Nebius Token Factory authentication failed: invalid API key")
+            raise ModelAuthenticationError(
+                "Nebius Token Factory authentication failed: invalid API key"
+            )
         elif resp.status_code == 429:
-            raise ModelRateLimitError("Nebius Token Factory rate limit or quota exceeded (HTTP 429)")
+            raise ModelRateLimitError(
+                "Nebius Token Factory rate limit or quota exceeded (HTTP 429)"
+            )
         elif resp.status_code >= 400:
             raise ModelError(f"Nebius Token Factory error (HTTP {resp.status_code})")
 
@@ -200,7 +205,9 @@ class NebiusTokenFactoryClient(ModelClient):
         try:
             return schema.model_validate(parsed_json)
         except ValidationError as err:
-            logger.warning("Model output failed Pydantic validation for %s: %s", schema.__name__, err)
+            logger.warning(
+                "Model output failed Pydantic validation for %s: %s", schema.__name__, err
+            )
             raise ModelSchemaValidationError(
                 f"Model output does not conform to schema {schema.__name__}: {err}"
             ) from err

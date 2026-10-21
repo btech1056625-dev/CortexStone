@@ -67,8 +67,11 @@ class AgentOrchestrator:
                 )
                 
                 parsed_plan: AgentPlan = response.parsed
+                
+                # Wrapped list comprehension to stay under 100 characters
                 extracted_sources = [
-                    item.get("source_ref") for item in (bounded_context or []) if "source_ref" in item
+                    item.get("source_ref") for item in (bounded_context or []) 
+                    if "source_ref" in item
                 ]
 
                 return AgentResult(
@@ -80,19 +83,35 @@ class AgentOrchestrator:
                     latency_ms=response.usage.latency_ms
                 )
             
+            # Formatted error returns to respect line length limits
             except ModelTimeoutError:
                 if attempt > self.max_retries:
-                    return AgentResult(is_error=True, error_message="Model inference timed out.")
+                    return AgentResult(
+                        is_error=True, 
+                        error_message="Model inference timed out."
+                    )
             except ModelSchemaValidationError:
                 if attempt > self.max_retries:
-                    return AgentResult(is_error=True, error_message="Model failed to produce a valid AgentPlan.")
+                    return AgentResult(
+                        is_error=True, 
+                        error_message="Model failed to produce a valid AgentPlan."
+                    )
             except ModelRateLimitError:
                 if attempt > self.max_retries:
-                    return AgentResult(is_error=True, error_message="Service is currently rate limited.")
+                    return AgentResult(
+                        is_error=True, 
+                        error_message="Service is currently rate limited."
+                    )
             except ModelAuthenticationError:
-                return AgentResult(is_error=True, error_message="Internal model authentication failed.")
+                return AgentResult(
+                    is_error=True, 
+                    error_message="Internal model authentication failed."
+                )
             except ModelError as err:
-                return AgentResult(is_error=True, error_message=f"Model execution error: {str(err)}")
+                return AgentResult(
+                    is_error=True, 
+                    error_message=f"Model execution error: {str(err)}"
+                )
 
         return AgentResult(is_error=True, error_message="Maximum retries exceeded.")
 
@@ -106,7 +125,11 @@ class AgentOrchestrator:
             formatted.append(f"[{idx}] (Source: {source}): {content}")
         return "\n".join(formatted)
 
-    def _build_messages(self, prompt: str, context: str, custom_instruction: Optional[str]) -> List[ModelMessage]:
+    def _build_messages(
+        self, prompt: str, context: str, custom_instruction: Optional[str]
+    ) -> List[ModelMessage]:
+        
+        # Split string to stay under the character limit
         base_system = (
             "You are Cortexstone, a private developer assistant.\n"
             "SYSTEM INVARIANT: You CANNOT execute tools directly. "
@@ -118,5 +141,8 @@ class AgentOrchestrator:
 
         return [
             ModelMessage(role=Role.SYSTEM, content=base_system),
-            ModelMessage(role=Role.USER, content=f"Context:\n{context}\n\nTask: {prompt}")
+            ModelMessage(
+                role=Role.USER, 
+                content=f"Context:\n{context}\n\nTask: {prompt}"
+            )
         ]

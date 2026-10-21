@@ -1,4 +1,3 @@
-
 """Cortexstone application package."""
 
 """
