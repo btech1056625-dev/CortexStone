@@ -18,6 +18,7 @@ from cortexstone.agent.schemas.actions import AgentPlan
 
 logger = logging.getLogger(__name__)
 
+
 class AgentResult(BaseModel):
     """Result returned by the AgentOrchestrator to Bhavya's backend boundary."""
     plan: Optional[AgentPlan] = None
