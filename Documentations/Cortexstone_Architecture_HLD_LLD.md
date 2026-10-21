@@ -106,27 +106,30 @@ Use the actual Nebius hosting primitives available. Do not assume serverless fun
 ## 3. Low-Level Design (LLD)
 ### 3.1 Repository layout
 ```text
-cortexstone/
-  apps/{api,worker,scheduler}/main.py
-  cortexstone/
-    api/v1/                 # routes + request/response schemas
-    config/                 # typed settings/startup checks
-    domain/                 # entities, enums, state machines
-    services/               # memory, jobs, approvals, policy, guardian
-    agent/                  # orchestrator, prompts, schemas, model client
-    memory/                 # repository, retrieval, embeddings, deletion
-    workflows/              # scheduler, worker, checkpoints, idempotency
-    security/               # permissions, policy, approvals, redaction, audit
-    tools/                  # contracts, runner, github/calendar/notes adapters
-    guardian/               # scanner, rules, findings
-    db/                     # models, session, migrations
-    observability/          # logs, metrics
-  frontend/
+CortexStone/
+  apps/                     # Independently runnable api, worker, scheduler processes
+  src/cortexstone/
+    api/v1/                 # Versioned HTTP routes and transport schemas
+    application/            # Chat, memory, jobs, actions, approvals, Guardian use cases
+    domain/                 # Entities, events, invariants, state machines
+    agent/                  # Orchestration, model adapters, prompts, schemas
+    memory/                 # Repositories, retrieval, embeddings, lifecycle
+    security/               # Policy, permissions, approvals, redaction, audit
+    tools/                  # Registry, restricted runner, GitHub/Calendar/Notes adapters
+    workflows/              # Durable jobs, scheduling, execution, idempotency
+    guardian/               # Scanner, rules, findings
+    db/                     # Persistence models and migrations
+    config/                 # Typed settings and startup checks
+    observability/          # Logs, metrics, tracing, health
+    interfaces/telegram/    # Telegram transport adapter
+  frontend/dashboard/       # Web dashboard; framework selected during implementation
   tests/{unit,integration,security,reliability,fixtures}/
   deploy/{docker,nebius,compose}/
   docs/{architecture,threat-model,runbooks}/
-  .env.example  pyproject.toml
+  Documentations/           # PRD, this HLD/LLD, and team rules
 ```
+
+The repository scaffold uses README placeholders to document intended responsibilities; they are not implementation files. Keep the API, worker, and scheduler as separately runnable processes in one modular monolith. Do not interpret the directory boundaries as a requirement to deploy every module as a microservice.
 
 ### 3.2 Module contracts
 | Interface | Input | Output | Boundary |
