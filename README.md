@@ -35,4 +35,4 @@ The README files in the scaffolded directories describe their intended responsib
 
 ## Implementation status
 
-This repository currently contains product documentation and an implementation-ready directory scaffold. Runtime code, dependency manifests, credentials, and deployment claims must be added and validated separately.
+This repository currently contains product documentation and an implementation-ready directory scaffold. Runtime code, dependency manifests, credentials, and deployment claims must be added and validated separately
