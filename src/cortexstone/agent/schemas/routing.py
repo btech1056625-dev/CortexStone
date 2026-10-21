@@ -11,7 +11,7 @@ import enum
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class IntentCategory(str, enum.Enum):
+class IntentCategory(enum.StrEnum):
     """Primary intent categories for Cortexstone."""
 
     DIRECT_CHAT = "direct_chat"  # Conversational, greetings, simple knowledge
@@ -22,7 +22,7 @@ class IntentCategory(str, enum.Enum):
     CLARIFICATION = "clarification"  # Ambiguous or missing essential details
 
 
-class ComplexityLevel(str, enum.Enum):
+class ComplexityLevel(enum.StrEnum):
     """Complexity tiers determining execution path and model allocation."""
 
     LOW = "low"  # Simple retrieval or conversational response; no complex planning
@@ -35,9 +35,7 @@ class RouteDecision(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    intent: IntentCategory = Field(
-        description="The primary classification of the user request"
-    )
+    intent: IntentCategory = Field(description="The primary classification of the user request")
     complexity: ComplexityLevel = Field(
         description="Complexity assessment for resource allocation and bounded planning"
     )
@@ -46,7 +44,9 @@ class RouteDecision(BaseModel):
     )
     extracted_entities: list[str] = Field(
         default_factory=list,
-        description="Named entities, repositories, dates, topics, or issue numbers extracted from the query",
+        description=(
+            "Named entities, repositories, dates, topics, or issue numbers extracted from the query"
+        ),
     )
     rationale: str = Field(
         description="Short justification of the routing decision (max 1-2 sentences)"

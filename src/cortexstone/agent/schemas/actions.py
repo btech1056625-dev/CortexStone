@@ -40,9 +40,7 @@ class ProposedAction(BaseModel):
     arguments: dict[str, Any] = Field(
         default_factory=dict, description="Explicit parameters required by the tool"
     )
-    purpose: str = Field(
-        description="Clear, truthful explanation of why this action is required"
-    )
+    purpose: str = Field(description="Clear, truthful explanation of why this action is required")
     idempotency_key: str | None = Field(
         default=None,
         description="Unique key ensuring safe replay without duplicate side-effects",

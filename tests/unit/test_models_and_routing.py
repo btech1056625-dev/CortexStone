@@ -53,9 +53,7 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
             rationale="User is asking for past meeting notes",
         )
         client = MockModelClient(parsed_fixture=fixture)
-        messages = [
-            ModelMessage(role=Role.USER, content="What did we discuss last week?")
-        ]
+        messages = [ModelMessage(role=Role.USER, content="What did we discuss last week?")]
         response = await client.generate_for_role(
             role=ModelRole.ROUTER,
             messages=messages,
@@ -76,9 +74,7 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
             "rationale": "Create pull request requires external tool"
         }
         ```"""
-        validated = NebiusTokenFactoryClient._parse_and_validate(
-            markdown_json, RouteDecision
-        )
+        validated = NebiusTokenFactoryClient._parse_and_validate(markdown_json, RouteDecision)
         self.assertEqual(validated.intent, IntentCategory.TOOL_ACTION)
         self.assertEqual(validated.complexity, ComplexityLevel.HIGH)
         self.assertTrue(validated.needs_reasoner)

@@ -132,19 +132,13 @@ class NebiusTokenFactoryClient(ModelClient):
                 timeout=timeout,
             )
         except httpx.TimeoutException as exc:
-            logger.error(
-                "Inference timed out after %.1fs for model %s", timeout, chosen_model
-            )
+            logger.error("Inference timed out after %.1fs for model %s", timeout, chosen_model)
             raise ModelTimeoutError(
                 f"Nebius Token Factory request timed out after {timeout:.1f}s"
             ) from exc
         except httpx.RequestError as exc:
-            logger.error(
-                "Network error communicating with Nebius: %s", type(exc).__name__
-            )
-            raise ModelError(
-                f"Network error during model inference: {type(exc).__name__}"
-            ) from exc
+            logger.error("Network error communicating with Nebius: %s", type(exc).__name__)
+            raise ModelError(f"Network error during model inference: {type(exc).__name__}") from exc
         finally:
             if not self._external_client:
                 await client.aclose()
@@ -204,9 +198,7 @@ class NebiusTokenFactoryClient(ModelClient):
         try:
             parsed_json = json.loads(clean_text)
         except json.JSONDecodeError as err:
-            logger.warning(
-                "Model returned invalid JSON for schema %s: %s", schema.__name__, err
-            )
+            logger.warning("Model returned invalid JSON for schema %s: %s", schema.__name__, err)
             raise ModelSchemaValidationError(
                 f"Model output is not valid JSON for {schema.__name__}: {err}"
             ) from err
