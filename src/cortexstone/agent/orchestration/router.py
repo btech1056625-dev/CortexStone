@@ -8,19 +8,20 @@ Delivered by Archis Samanta (ML/DL — Agents Core) for Cortexstone.
 from __future__ import annotations
 
 import logging
+
 from cortexstone.agent.models.interface import (
     ModelClient,
-    ModelRole,
-    ModelMessage,
-    Role,
     ModelError,
-)
-from cortexstone.agent.schemas.routing import (
-    RouteDecision,
-    IntentCategory,
-    ComplexityLevel,
+    ModelMessage,
+    ModelRole,
+    Role,
 )
 from cortexstone.agent.prompts.templates import ROUTER_SYSTEM_PROMPT_V1
+from cortexstone.agent.schemas.routing import (
+    ComplexityLevel,
+    IntentCategory,
+    RouteDecision,
+)
 
 logger = logging.getLogger("cortexstone.agent.orchestration.router")
 
@@ -65,9 +66,9 @@ class IntentRouter:
             if response.parsed is None:
                 raise ModelError("Model failed to return parsed RouteDecision schema")
             return response.parsed
-        except Exception as exc:
+        except (ModelError, ValueError, KeyError) as exc:
             logger.warning("Intent routing fallback triggered due to: %s", exc)
-            # Safe default fallback: treat as clarification or route to reasoner if uncertainty exists
+            # Safe fallback: treat as clarification or route to reasoner
             return RouteDecision(
                 intent=IntentCategory.CLARIFICATION,
                 complexity=ComplexityLevel.MEDIUM,

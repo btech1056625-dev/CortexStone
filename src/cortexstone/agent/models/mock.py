@@ -8,13 +8,14 @@ without burning Nebius Token Factory credits.
 from __future__ import annotations
 
 from typing import Any, TypeVar
+
 from pydantic import BaseModel
 
 from cortexstone.agent.models.interface import (
     ModelClient,
-    ModelRole,
     ModelMessage,
     ModelResponse,
+    ModelRole,
     UsageMetadata,
 )
 

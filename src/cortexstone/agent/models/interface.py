@@ -9,20 +9,21 @@ from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
+
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class ModelRole(str, enum.Enum):
+class ModelRole(enum.StrEnum):
     """Identifies the operational tier for model routing."""
 
     ROUTER = "router"  # Nemotron Mini: Intent classification & complexity routing
     REASONER = "reasoner"  # Nemotron 3 Super 120B A12B: Complex reasoning and planning
 
 
-class Role(str, enum.Enum):
+class Role(enum.StrEnum):
     """Chat message roles."""
 
     SYSTEM = "system"
@@ -57,7 +58,7 @@ class UsageMetadata:
 
 
 @dataclass
-class ModelResponse(Generic[T]):
+class ModelResponse[T: BaseModel]:
     """Parsed model response with execution metadata."""
 
     raw_content: str

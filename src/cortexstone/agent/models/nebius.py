@@ -12,20 +12,21 @@ import json
 import logging
 import time
 from typing import Any, TypeVar
+
 import httpx
 from pydantic import BaseModel, ValidationError
 
 from cortexstone.agent.models.interface import (
-    ModelClient,
-    ModelRole,
-    ModelMessage,
-    ModelResponse,
-    UsageMetadata,
-    ModelError,
-    ModelTimeoutError,
-    ModelRateLimitError,
     ModelAuthenticationError,
+    ModelClient,
+    ModelError,
+    ModelMessage,
+    ModelRateLimitError,
+    ModelResponse,
+    ModelRole,
     ModelSchemaValidationError,
+    ModelTimeoutError,
+    UsageMetadata,
 )
 
 logger = logging.getLogger("cortexstone.agent.models.nebius")
@@ -206,7 +207,9 @@ class NebiusTokenFactoryClient(ModelClient):
             return schema.model_validate(parsed_json)
         except ValidationError as err:
             logger.warning(
-                "Model output failed Pydantic validation for %s: %s", schema.__name__, err
+                "Model output failed Pydantic validation for %s: %s",
+                schema.__name__,
+                err,
             )
             raise ModelSchemaValidationError(
                 f"Model output does not conform to schema {schema.__name__}: {err}"

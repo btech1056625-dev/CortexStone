@@ -1,5 +1,3 @@
-"""Cortexstone application package."""
-
 """
 Cortexstone: Private, always-on AI assistant (Remember, Act, Protect).
 """
