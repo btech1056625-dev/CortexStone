@@ -45,6 +45,20 @@ Run checks with `ruff check .`, `ruff format --check .`, and `pytest`. Compose r
 - Keep database access behind repositories/services as they are introduced. Coordinate schema and API changes with their owners before merging; update OpenAPI schemas and tests in the same change.
 - Return truthful status codes. Use `503` for readiness when a required dependency is unavailable; liveness must not depend on PostgreSQL.
 
+## Chat payload schemas
+
+`ChatRequest` and `ChatResponse` in `src/cortexstone/api/v1/schemas.py` define the initial chat boundary; they are not yet connected to an HTTP route. Requests require a non-blank message (up to 10,000 characters), may include an opaque conversation ID, and reject unknown fields. Responses echo that ID when supplied, require a non-blank answer or at least one typed proposed action, limit answers to 20,000 characters and action proposals to three per turn, and reject unknown fields. They reuse the agent layer's `ProposedAction` schema, which validates bounded tool names, targets, and purposes and forbids model-supplied authorization fields. Agent plans allow up to five steps internally; the API's three-proposal cap follows the per-turn integration contract. Proposals remain unexecuted.
+
+## Backend action policy
+
+`PolicyEngine` in `src/cortexstone/security/policy/service.py` evaluates typed proposals against a server-owned tool registry and backend-resolved principal grants. It fails closed for unknown tools, targets outside either allowlist, missing grants, and missing, unexpected, or non-JSON arguments. Grants are exact tool/scope/target combinations; target matching does not use wildcard patterns. Read-only, low-risk actions may be allowed; write actions and medium/high-risk actions require trusted, unexpired approval evidence bound to the exact target and SHA-256 hash of the tool and canonical arguments. The model cannot supply this evidence.
+
+The `POST /api/v1/actions/validate` endpoint uses FastAPI dependencies to obtain the app-scoped policy engine and trusted principal. Until authentication is implemented, the default principal dependency returns `503`; tests or a future authentication integration may override it with a trusted provider. The endpoint accepts no approval evidence and never executes actions, so writes remain approval-required. Permission persistence/revocation, approval storage, audit logging, per-tool argument schemas, and revalidation immediately before execution remain integration work.
+
+Configure exact `notes.search` targets with the comma-separated `CORTEXSTONE_POLICY_NOTES_SEARCH_TARGETS` environment variable (for example, `notes/personal`). It defaults to empty, which registers no tools and fails closed. Only targets configured by the backend are considered; request payloads cannot configure policy.
+
+All actual tool calls must go through `ToolRunner.execute(principal, action)` in `src/cortexstone/tools/runner/service.py`. The runner resolves trusted approval evidence (when configured), evaluates the action immediately before dispatch, and invokes only a registered executor when the decision is `ALLOW`. Direct connector calls from application code bypass this guarantee and must not be introduced. No concrete tool executors are registered yet.
+
 ## Current bootstrap endpoints
 
 | Method | Path | Purpose |
@@ -52,6 +66,7 @@ Run checks with `ruff check .`, `ruff format --check .`, and `pytest`. Compose r
 | GET | `/health/live` | Process liveness |
 | GET | `/health/ready` | PostgreSQL connectivity check |
 | GET | `/api/v1/health` | Versioned API status |
+| POST | `/api/v1/actions/validate` | Validate a typed action proposal; does not execute it |
 | GET | `/api/v1/docs` | Interactive OpenAPI documentation |
 | GET | `/api/v1/openapi.json` | OpenAPI document |
 
