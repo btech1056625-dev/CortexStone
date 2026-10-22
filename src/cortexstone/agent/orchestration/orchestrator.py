@@ -1,149 +1,99 @@
 import logging
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List
 
-from cortexstone.agent.models.interface import (
-    ModelClient,
-    ModelRole,
-    Role,
-    ModelMessage,
-    ModelTimeoutError,
-    ModelSchemaValidationError,
-    ModelRateLimitError,
-    ModelAuthenticationError,
-    ModelError
-)
-# Importing the schema that you and Archis already created
-from cortexstone.agent.schemas.actions import AgentPlan
+from cortexstone.agent.models.interface import ModelClient, ModelRole, ModelMessage, Role
+from cortexstone.agent.orchestration.router import IntentRouter
+from cortexstone.agent.schemas.routing import RouteDecision
+from cortexstone.agent.schemas.actions import AgentPlan, ProposedAction
 
 logger = logging.getLogger(__name__)
-
-
-class AgentResult(BaseModel):
-    """Result returned by the AgentOrchestrator to Bhavya's backend boundary."""
-    plan: Optional[AgentPlan] = None
-    sources: List[str] = Field(default_factory=list)
-    model_id: str = ""
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    latency_ms: float = 0.0
-    is_error: bool = False
-    error_message: Optional[str] = None
 
 
 class AgentOrchestrator:
     """
     Core Agent Orchestrator.
-    Executes the request-to-model workflow using Archis's ModelClient.
+    Wires IntentRouter and bounded execution limits per team integration specs.
     """
 
-    def __init__(
-        self,
-        model_client: ModelClient,
-        max_retries: int = 2,
-        timeout_seconds: float = 30.0
-    ):
+    def __init__(self, model_client: ModelClient):
         self.model_client = model_client
-        self.max_retries = max_retries
-        self.timeout_seconds = timeout_seconds
+        # 1. Wire the Intent Router
+        self.router = IntentRouter(model_client)
+        
+        # 3. Enforce Bounded Execution Limits (Hard caps in code)
+        self.max_iterations = 5
+        self.max_tools_per_turn = 3
+        self.timeout_seconds = 30.0
 
     async def run(
-        self,
-        user_prompt: str,
-        bounded_context: Optional[List[Dict[str, Any]]] = None,
-        system_instruction: Optional[str] = None
-    ) -> AgentResult:
+        self, user_message: str, context: List[Dict[str, Any]]
+    ) -> List[ProposedAction]:
         
-        context_str = self._format_context(bounded_context)
-        messages = self._build_messages(user_prompt, context_str, system_instruction)
+        # Step 1: Fast triage via Nemotron Mini Router
+        try:
+            route: RouteDecision = await self.router.route(user_message)
+        except Exception as e:
+            logger.error(f"Router failed: {e}. Defaulting to safe fallback.")
+            route = RouteDecision(
+                intent="clarification", needs_reasoner=False, complexity="low"
+            )
 
-        for attempt in range(1, self.max_retries + 2):
-            try:
-                # Ask the model to generate a plan matching the AgentPlan schema
-                response = await self.model_client.generate_for_role(
-                    role=ModelRole.REASONER,
-                    messages=messages,
-                    schema=AgentPlan,
-                    timeout=self.timeout_seconds
-                )
-                
-                parsed_plan: AgentPlan = response.parsed
-                
-                # Wrapped list comprehension to stay under 100 characters
-                extracted_sources = [
-                    item.get("source_ref") for item in (bounded_context or []) 
-                    if "source_ref" in item
-                ]
-
-                return AgentResult(
-                    plan=parsed_plan,
-                    sources=extracted_sources,
-                    model_id=response.model_id,
-                    prompt_tokens=response.usage.prompt_tokens,
-                    completion_tokens=response.usage.completion_tokens,
-                    latency_ms=response.usage.latency_ms
-                )
+        # Step 2: Dispatch to Nemotron 3 Super 120B Reasoner
+        # Only triggers if router says needs_reasoner OR intent is tool_action
+        if route.needs_reasoner or route.intent == "tool_action":
             
-            # Formatted error returns to respect line length limits
-            except ModelTimeoutError:
-                if attempt > self.max_retries:
-                    return AgentResult(
-                        is_error=True, 
-                        error_message="Model inference timed out."
-                    )
-            except ModelSchemaValidationError:
-                if attempt > self.max_retries:
-                    return AgentResult(
-                        is_error=True, 
-                        error_message="Model failed to produce a valid AgentPlan."
-                    )
-            except ModelRateLimitError:
-                if attempt > self.max_retries:
-                    return AgentResult(
-                        is_error=True, 
-                        error_message="Service is currently rate limited."
-                    )
-            except ModelAuthenticationError:
-                return AgentResult(
-                    is_error=True, 
-                    error_message="Internal model authentication failed."
-                )
-            except ModelError as err:
-                return AgentResult(
-                    is_error=True, 
-                    error_message=f"Model execution error: {str(err)}"
-                )
+            messages = self._build_messages(user_message, context)
 
-        return AgentResult(is_error=True, error_message="Maximum retries exceeded.")
+            # Max 5 planning iterations enforcement
+            for iteration in range(self.max_iterations):
+                try:
+                    response = await self.model_client.generate_for_role(
+                        role=ModelRole.REASONER,
+                        messages=messages,
+                        schema=AgentPlan,
+                        timeout=self.timeout_seconds
+                    )
+                except Exception as e:
+                    logger.error(f"Reasoner execution failed on iter {iteration}: {e}")
+                    break
 
-    def _format_context(self, context: Optional[List[Dict[str, Any]]]) -> str:
-        if not context:
-            return "No prior memory context available."
-        formatted = []
-        for idx, item in enumerate(context, 1):
-            source = item.get("source_ref", "unknown")
-            content = item.get("content", "")
-            formatted.append(f"[{idx}] (Source: {source}): {content}")
-        return "\n".join(formatted)
+                if not response.parsed or not response.parsed.actions:
+                    return []
+
+                proposed_actions: List[ProposedAction] = response.parsed.actions
+                
+                # Max 3 tool proposals per turn enforcement
+                if len(proposed_actions) > self.max_tools_per_turn:
+                    logger.warning("Tool proposal limit exceeded. Truncating to 3.")
+                    proposed_actions = proposed_actions[:self.max_tools_per_turn]
+                
+                # Returning the typed ProposedAction list for the PolicyEngine
+                return proposed_actions
+            
+            logger.warning("Max 5 planning iterations exhausted.")
+            return []
+            
+        return []
 
     def _build_messages(
-        self, prompt: str, context: str, custom_instruction: Optional[str]
+        self, prompt: str, context: List[Dict[str, Any]]
     ) -> List[ModelMessage]:
         
-        # Split string to stay under the character limit
-        base_system = (
-            "You are Cortexstone, a private developer assistant.\n"
-            "SYSTEM INVARIANT: You CANNOT execute tools directly. "
-            "You MUST propose a structured AgentPlan containing up to 5 actions. "
-            "Do not pretend an action was executed."
-        )
-        if custom_instruction:
-            base_system += f"\n{custom_instruction}"
-
+        formatted_ctx = []
+        for c in context:
+            ref = c.get("source_ref", "unknown")
+            text = c.get("content", "")
+            formatted_ctx.append(f"[{ref}]: {text}")
+        
+        ctx_str = "\n".join(formatted_ctx) if formatted_ctx else "No context."
+        
         return [
-            ModelMessage(role=Role.SYSTEM, content=base_system),
+            ModelMessage(
+                role=Role.SYSTEM, 
+                content="You are Cortexstone. Produce a bounded AgentPlan."
+            ),
             ModelMessage(
                 role=Role.USER, 
-                content=f"Context:\n{context}\n\nTask: {prompt}"
+                content=f"Context:\n{ctx_str}\n\nTask: {prompt}"
             )
         ]
