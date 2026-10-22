@@ -25,6 +25,7 @@ from cortexstone.agent.models.mock import MockModelClient
 from cortexstone.agent.models.nebius import NebiusTokenFactoryClient
 from cortexstone.agent.orchestration.router import IntentRouter
 from cortexstone.agent.schemas.actions import (
+    AgentPlan,
     ProposedAction,
 )
 from cortexstone.agent.schemas.routing import (
@@ -99,6 +100,48 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
         }
         with self.assertRaises(ValidationError):
             ProposedAction.model_validate(payload)
+
+    def test_proposed_action_validates_tool_name_and_target_reference(self):
+        action = ProposedAction(
+            tool_name=" notes.search ",
+            target_ref="owner/repo",
+            purpose="Find project notes",
+        )
+        self.assertEqual(action.tool_name, "notes.search")
+        self.assertEqual(action.target_ref, "owner/repo")
+
+        action = ProposedAction(
+            tool_name="notes.search",
+            target_ref="notes/personal",
+            purpose="Find project notes",
+        )
+        self.assertEqual(action.target_ref, "notes/personal")
+
+        for invalid_name in (" ", "Notes.Search", "notes search"):
+            with self.subTest(tool_name=invalid_name):
+                with self.assertRaises(ValidationError):
+                    ProposedAction(
+                        tool_name=invalid_name,
+                        target_ref="notes/personal",
+                        purpose="Find project notes",
+                    )
+
+    def test_proposed_action_limits_purpose_length(self):
+        with self.assertRaises(ValidationError):
+            ProposedAction(
+                tool_name="notes.search",
+                target_ref="notes/personal",
+                purpose="x" * 1001,
+            )
+
+    def test_agent_plan_rejects_model_supplied_approval(self):
+        with self.assertRaises(ValidationError):
+            AgentPlan.model_validate(
+                {
+                    "summary": "Search notes",
+                    "requires_user_approval": False,
+                }
+            )
 
     async def test_intent_router_success(self):
         fixture = RouteDecision(
