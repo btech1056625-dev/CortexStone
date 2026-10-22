@@ -34,8 +34,6 @@ py -m uvicorn cortexstone.api.main:app --reload
 
 Run checks with `ruff check .`, `ruff format --check .`, and `pytest`. Compose reads `.env` for database and port settings; the host-run API reads `DATABASE_URL` from its process environment.
 
-`CORTEXSTONE_POLICY_NOTES_SEARCH_TARGETS` configures the exact, comma-separated targets allowed for `notes.search`. It defaults to empty, which registers no targets and fails closed.
-
 ## API and integration conventions
 
 - Put product endpoints under `/api/v1`. Keep platform probes `/health/live` and `/health/ready` unversioned so deployment tooling can use stable paths.

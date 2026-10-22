@@ -101,47 +101,61 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValidationError):
             ProposedAction.model_validate(payload)
 
-    def test_proposed_action_validates_tool_name_and_target_reference(self):
-        action = ProposedAction(
-            tool_name=" notes.search ",
-            target_ref="owner/repo",
-            purpose="Find project notes",
-        )
-        self.assertEqual(action.tool_name, "notes.search")
-        self.assertEqual(action.target_ref, "owner/repo")
+    def test_proposed_action_requires_bounded_nonblank_fields(self):
+        for tool_name in (" ", "github/create", "notes..search", "notes.search!", "x" * 129, 123):
+            with self.subTest(tool_name=tool_name), self.assertRaises(ValidationError):
+                ProposedAction(
+                    tool_name=tool_name,
+                    target_ref="owner/repo",
+                    purpose="Open a reviewed draft",
+                )
 
-        action = ProposedAction(
-            tool_name="notes.search",
-            target_ref="notes/personal",
-            purpose="Find project notes",
-        )
-        self.assertEqual(action.target_ref, "notes/personal")
+        for target_ref in ("", " ", "x" * 513, 123):
+            with self.subTest(target_ref=target_ref), self.assertRaises(ValidationError):
+                ProposedAction(
+                    tool_name="notes.search",
+                    target_ref=target_ref,
+                    purpose="Find the requested note",
+                )
 
-        for invalid_name in (" ", "Notes.Search", "notes search"):
-            with self.subTest(tool_name=invalid_name):
-                with self.assertRaises(ValidationError):
-                    ProposedAction(
-                        tool_name=invalid_name,
-                        target_ref="notes/personal",
-                        purpose="Find project notes",
-                    )
-
-    def test_proposed_action_limits_purpose_length(self):
         with self.assertRaises(ValidationError):
             ProposedAction(
-                tool_name="notes.search",
-                target_ref="notes/personal",
+                tool_name="github.create_draft_pr",
+                target_ref="owner/repo",
                 purpose="x" * 1001,
             )
 
-    def test_agent_plan_rejects_model_supplied_approval(self):
+    def test_proposed_action_accepts_valid_references_and_field_boundaries(self):
+        for target_ref in ("owner/repo", "notes/personal", "x" * 512):
+            with self.subTest(target_ref=target_ref):
+                action = ProposedAction(
+                    tool_name="  notes.search  ",
+                    target_ref=f"  {target_ref}  ",
+                    purpose="x" * 1000,
+                )
+                self.assertEqual(action.tool_name, "notes.search")
+                self.assertEqual(action.target_ref, target_ref)
+                self.assertEqual(action.purpose, "x" * 1000)
+
+        action = ProposedAction(tool_name="x" * 128, target_ref="personal", purpose="  ")
+        self.assertEqual(action.purpose, "  ")
+
+    def test_agent_plan_limits_actions_to_five(self):
+        action = {
+            "tool_name": "notes.search",
+            "target_ref": "personal",
+            "purpose": "Find the requested note",
+        }
         with self.assertRaises(ValidationError):
-            AgentPlan.model_validate(
-                {
-                    "summary": "Search notes",
-                    "requires_user_approval": False,
-                }
-            )
+            AgentPlan(summary="Search notes", actions=[action] * 6)
+
+    def test_agent_plan_forbids_model_supplied_approval_decisions(self):
+        for approval in (False, True):
+            with self.subTest(approval=approval), self.assertRaises(ValidationError) as raised:
+                AgentPlan.model_validate(
+                    {"summary": "Search notes", "requires_user_approval": approval}
+                )
+            self.assertEqual(raised.exception.errors()[0]["type"], "extra_forbidden")
 
     async def test_intent_router_success(self):
         fixture = RouteDecision(
