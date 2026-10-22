@@ -7,35 +7,35 @@ Unit tests for Archis Samanta's ML/DL components:
 - IntentRouter classification with Nemotron Mini
 - Policy invariance: Schemas forbid model-supplied authorization claims
 """
+
 from __future__ import annotations
 
 import unittest
-import uuid
+
 from pydantic import ValidationError
 
 from cortexstone.agent.models.interface import (
-    ModelRole,
-    Role,
     ModelMessage,
-    ModelTimeoutError,
+    ModelRole,
     ModelSchemaValidationError,
+    ModelTimeoutError,
+    Role,
 )
 from cortexstone.agent.models.mock import MockModelClient
 from cortexstone.agent.models.nebius import NebiusTokenFactoryClient
+from cortexstone.agent.orchestration.router import IntentRouter
+from cortexstone.agent.schemas.actions import (
+    AgentPlan,
+    ProposedAction,
+)
 from cortexstone.agent.schemas.routing import (
-    IntentCategory,
     ComplexityLevel,
+    IntentCategory,
     RouteDecision,
 )
-from cortexstone.agent.schemas.actions import (
-    ProposedAction,
-    AgentPlan,
-)
-from cortexstone.agent.orchestration.router import IntentRouter
 
 
 class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
-
     async def test_mock_model_client_generation(self):
         client = MockModelClient(fixed_text="Hello from mock")
         messages = [ModelMessage(role=Role.USER, content="Hello")]
@@ -100,6 +100,62 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
         }
         with self.assertRaises(ValidationError):
             ProposedAction.model_validate(payload)
+
+    def test_proposed_action_requires_bounded_nonblank_fields(self):
+        for tool_name in (" ", "github/create", "notes..search", "notes.search!", "x" * 129, 123):
+            with self.subTest(tool_name=tool_name), self.assertRaises(ValidationError):
+                ProposedAction(
+                    tool_name=tool_name,
+                    target_ref="owner/repo",
+                    purpose="Open a reviewed draft",
+                )
+
+        for target_ref in ("", " ", "x" * 513, 123):
+            with self.subTest(target_ref=target_ref), self.assertRaises(ValidationError):
+                ProposedAction(
+                    tool_name="notes.search",
+                    target_ref=target_ref,
+                    purpose="Find the requested note",
+                )
+
+        with self.assertRaises(ValidationError):
+            ProposedAction(
+                tool_name="github.create_draft_pr",
+                target_ref="owner/repo",
+                purpose="x" * 1001,
+            )
+
+    def test_proposed_action_accepts_valid_references_and_field_boundaries(self):
+        for target_ref in ("owner/repo", "notes/personal", "x" * 512):
+            with self.subTest(target_ref=target_ref):
+                action = ProposedAction(
+                    tool_name="  notes.search  ",
+                    target_ref=f"  {target_ref}  ",
+                    purpose="x" * 1000,
+                )
+                self.assertEqual(action.tool_name, "notes.search")
+                self.assertEqual(action.target_ref, target_ref)
+                self.assertEqual(action.purpose, "x" * 1000)
+
+        action = ProposedAction(tool_name="x" * 128, target_ref="personal", purpose="  ")
+        self.assertEqual(action.purpose, "  ")
+
+    def test_agent_plan_limits_actions_to_five(self):
+        action = {
+            "tool_name": "notes.search",
+            "target_ref": "personal",
+            "purpose": "Find the requested note",
+        }
+        with self.assertRaises(ValidationError):
+            AgentPlan(summary="Search notes", actions=[action] * 6)
+
+    def test_agent_plan_forbids_model_supplied_approval_decisions(self):
+        for approval in (False, True):
+            with self.subTest(approval=approval), self.assertRaises(ValidationError) as raised:
+                AgentPlan.model_validate(
+                    {"summary": "Search notes", "requires_user_approval": approval}
+                )
+            self.assertEqual(raised.exception.errors()[0]["type"], "extra_forbidden")
 
     async def test_intent_router_success(self):
         fixture = RouteDecision(
