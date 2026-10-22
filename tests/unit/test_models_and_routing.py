@@ -300,6 +300,7 @@ class TestModelClientAndRouting(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(action.requested_at.tzinfo)
         self.assertEqual(action.requested_at.utcoffset(), UTC.utcoffset(action.requested_at))
+
     def test_proposed_action_requires_bounded_nonblank_fields(self):
         for tool_name in (" ", "github/create", "notes..search", "notes.search!", "x" * 129, 123):
             with self.subTest(tool_name=tool_name), self.assertRaises(ValidationError):
