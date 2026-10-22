@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from cortexstone.agent.orchestration.orchestrator import AgentOrchestrator
-from cortexstone.agent.schemas.actions import AgentPlan, ProposedAction
+from cortexstone.agent.schemas.actions import AgentPlan
 from cortexstone.agent.schemas.routing import IntentCategory, RouteDecision
 
 
