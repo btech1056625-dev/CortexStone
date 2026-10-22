@@ -25,7 +25,6 @@ from cortexstone.agent.models.mock import MockModelClient
 from cortexstone.agent.models.nebius import NebiusTokenFactoryClient
 from cortexstone.agent.orchestration.router import IntentRouter
 from cortexstone.agent.schemas.actions import (
-    AgentPlan,
     ProposedAction,
 )
 from cortexstone.agent.schemas.routing import (
