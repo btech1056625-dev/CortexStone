@@ -34,7 +34,7 @@ TargetRef = Annotated[
 ]
 ActionPurpose = Annotated[
     str,
-    StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=1000),
+    StringConstraints(max_length=1000),
 ]
 
 
