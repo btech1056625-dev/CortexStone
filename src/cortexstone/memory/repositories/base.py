@@ -4,7 +4,6 @@ Enforces mandatory owner-scoped access on every query and mutation.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 from uuid import UUID
 
 from cortexstone.db.models.memory import MemoryItemModel
@@ -46,7 +45,7 @@ class MemoryRepositoryInterface(ABC):
         owner_id: str,
         memory_id: UUID,
         include_deleted: bool = False,
-    ) -> Optional[MemoryItemModel]:
+    ) -> MemoryItemModel | None:
         """Fetch a single memory item by memory ID scoped to its owner.
 
         Args:
@@ -65,8 +64,8 @@ class MemoryRepositoryInterface(ABC):
     async def list(
         self,
         owner_id: str,
-        filter_params: Optional[MemoryFilter] = None,
-    ) -> List[MemoryItemModel]:
+        filter_params: MemoryFilter | None = None,
+    ) -> list[MemoryItemModel]:
         """List memory items belonging to the owner matching filter criteria.
 
         Args:
@@ -85,7 +84,7 @@ class MemoryRepositoryInterface(ABC):
         memory_id: UUID,
         update_data: MemoryItemUpdate,
         allow_approval_change: bool = False,
-    ) -> Optional[MemoryItemModel]:
+    ) -> MemoryItemModel | None:
         """Update an existing active memory item owned by owner_id.
 
         Args:

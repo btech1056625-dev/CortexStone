@@ -332,10 +332,12 @@ from cortexstone.application.memory.service import MemoryService
 from cortexstone.memory.retrieval.retriever import MemoryRetrievalService
 from cortexstone.security.audit.service import InMemoryAuditLogger
 
+
 # 1. Database session generator
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
         yield session
+
 
 # 2. Authenticated user ID provider (Prerequisite from Raghav/Bhavya)
 async def get_current_user_id(
@@ -355,6 +357,7 @@ async def get_current_user_id(
         )
     return user_id.strip()
 
+
 # 3. MemoryService factory
 async def get_memory_service(
     session: AsyncSession = Depends(get_db_session),
@@ -363,13 +366,14 @@ async def get_memory_service(
     audit = InMemoryAuditLogger()
     return MemoryService(repository=repo, audit_logger=audit)
 
+
 # 4. MemoryRetrievalService factory
 async def get_retrieval_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> MemoryRetrievalService:
     repo = SqlAlchemyMemoryRepository(session=session)
     # EmbeddingProvider is injected from app state or configuration
-    provider = ... # Injected concrete EmbeddingProvider
+    provider = ...  # Injected concrete EmbeddingProvider
     return MemoryRetrievalService(repository=repo, embedding_provider=provider)
 ```
 

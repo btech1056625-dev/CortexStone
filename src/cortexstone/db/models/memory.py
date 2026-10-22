@@ -11,7 +11,7 @@ freeze a premature dimension integer (e.g., 384 vs 768 vs 1536) in schema migrat
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -24,10 +24,11 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from cortexstone.db.base import Base, TimestampMixin, utc_now
+from cortexstone.db.base import Base, TimestampMixin
 
 # Try to import Vector from pgvector.sqlalchemy if installed in the environment.
 # If pgvector is not installed, we fallback to a NullType / Text placeholder
@@ -90,7 +91,7 @@ class MemoryItemModel(Base, TimestampMixin):
         String(20),
         nullable=False,
     )
-    title: Mapped[Optional[str]] = mapped_column(
+    title: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
@@ -104,24 +105,24 @@ class MemoryItemModel(Base, TimestampMixin):
     # To prevent freezing an unconfirmed dimension prematurely, the column is typed
     # generically as Text/JSON or dynamic Vector when instantiated with dimension.
     # It remains NULLABLE by default.
-    embedding: Mapped[Optional[Any]] = mapped_column(
+    embedding: Mapped[Any | None] = mapped_column(
         Text,  # Will map to Vector(D) once team finalizes dimension integer
         nullable=True,
     )
 
-    source_type: Mapped[Optional[str]] = mapped_column(
+    source_type: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
-    source_ref: Mapped[Optional[str]] = mapped_column(
+    source_ref: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
-    occurred_at: Mapped[Optional[datetime]] = mapped_column(
+    occurred_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
-    confidence: Mapped[Optional[float]] = mapped_column(
+    confidence: Mapped[float | None] = mapped_column(
         Float,
         nullable=True,
     )
@@ -135,12 +136,12 @@ class MemoryItemModel(Base, TimestampMixin):
         default=False,
         nullable=False,
     )
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+    deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         index=True,
     )
-    metadata_: Mapped[Dict[str, Any]] = mapped_column(
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata",
         JSONB,
         default=dict,

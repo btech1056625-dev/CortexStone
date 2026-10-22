@@ -5,11 +5,11 @@ and update security without requiring a live PostgreSQL database.
 Uses AsyncSession mocks and SQLAlchemy statement inspection.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.dialects import postgresql
 
 from cortexstone.db.models.memory import MemoryItemModel
@@ -20,7 +20,6 @@ from cortexstone.memory.schemas import (
     MemoryItemCreate,
     MemoryItemUpdate,
     MemoryKind,
-    SensitivityLevel,
 )
 
 
@@ -37,6 +36,7 @@ def get_compiled_sql(stmt) -> str:
 # -----------------------------------------------------------------------------
 # 1. Creation and Ownership Assignment
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_create_assigns_supplied_owner_id():
@@ -75,6 +75,7 @@ async def test_create_rejects_empty_owner_id():
 # -----------------------------------------------------------------------------
 # 2. get_by_id Query Construction & Isolation
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_get_by_id_statement_includes_owner_and_deleted_filter():
@@ -122,6 +123,7 @@ async def test_get_by_id_with_include_deleted():
 # 3. list Query Construction & Filters
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.anyio
 async def test_list_statement_owner_filtering_and_pagination():
     """Verify list query applies owner_id filter, excludes deleted records, and paginates."""
@@ -167,8 +169,8 @@ async def test_list_temporal_and_approval_filters():
 
     repo = SqlAlchemyMemoryRepository(mock_session)
 
-    dt_after = datetime(2026, 10, 1, 0, 0, 0, tzinfo=timezone.utc)
-    dt_before = datetime(2026, 10, 20, 0, 0, 0, tzinfo=timezone.utc)
+    dt_after = datetime(2026, 10, 1, 0, 0, 0, tzinfo=UTC)
+    dt_before = datetime(2026, 10, 20, 0, 0, 0, tzinfo=UTC)
 
     filter_params = MemoryFilter(
         approved_only=True,
@@ -188,6 +190,7 @@ async def test_list_temporal_and_approval_filters():
 # -----------------------------------------------------------------------------
 # 4. update Protections
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_update_cannot_change_owner_id_or_reactivate():
@@ -247,6 +250,7 @@ async def test_update_approval_status_requires_explicit_authorization():
 # -----------------------------------------------------------------------------
 # 5. Soft-Delete and Hard-Delete Statement Construction
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_soft_delete_statement_sets_deleted_at_with_owner_id():

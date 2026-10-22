@@ -11,7 +11,6 @@ Invariants:
 4. If no records are retrieved, returns a standardized empty context block.
 """
 
-from typing import List, Optional
 from cortexstone.memory.schemas import MemoryItemRead, MemorySearchResult
 
 
@@ -36,8 +35,8 @@ def format_memory_item_citation(item: MemoryItemRead) -> str:
 
 
 def format_memory_context(
-    results: List[MemorySearchResult],
-    max_items: Optional[int] = None,
+    results: list[MemorySearchResult],
+    max_items: int | None = None,
 ) -> str:
     """Format a list of retrieved MemorySearchResult items into a prompt-ready context block.
 

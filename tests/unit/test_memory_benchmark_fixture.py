@@ -1,18 +1,18 @@
-"""Unit tests verifying the integrity, coverage, and evaluation schema of the 20-question benchmark."""
+"""Unit tests verifying the integrity, coverage, and evaluation schema of the 20-question
+benchmark.
+"""
 
 import json
 import os
-import pytest
 from uuid import UUID
 
 from cortexstone.memory.schemas import MemoryKind, SensitivityLevel
-
 
 FIXTURE_PATH = os.path.join("tests", "fixtures", "memory_eval_20_questions.json")
 
 
 def load_benchmark_fixture():
-    with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
+    with open(FIXTURE_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

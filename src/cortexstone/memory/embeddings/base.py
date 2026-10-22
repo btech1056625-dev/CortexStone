@@ -10,7 +10,6 @@ Includes support for:
 """
 
 from abc import ABC, abstractmethod
-from typing import List
 
 
 class EmbeddingProvider(ABC):
@@ -29,7 +28,7 @@ class EmbeddingProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str) -> list[float]:
         """Generate an embedding vector for a single string.
 
         Args:
@@ -41,7 +40,7 @@ class EmbeddingProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embedding vectors for a batch of strings.
 
         Args:
@@ -52,7 +51,7 @@ class EmbeddingProvider(ABC):
         """
         raise NotImplementedError
 
-    async def embed_query(self, query: str) -> List[float]:
+    async def embed_query(self, query: str) -> list[float]:
         """Generate an embedding vector specifically for a search query.
 
         Models such as BGE or E5/Qwen may apply query-specific prefixes or instructions.
@@ -66,7 +65,7 @@ class EmbeddingProvider(ABC):
         """
         return await self.embed_text(query)
 
-    async def embed_document(self, document: str) -> List[float]:
+    async def embed_document(self, document: str) -> list[float]:
         """Generate an embedding vector specifically for a stored document/memory item.
 
         Default implementation delegates to embed_text(document) for full backward compatibility.

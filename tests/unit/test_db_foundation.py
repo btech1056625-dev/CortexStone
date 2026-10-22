@@ -1,9 +1,11 @@
 """Tests for core database foundation: Base, naming convention, and session factory."""
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String
-from cortexstone.db.base import Base, TimestampMixin, utc_now, POSTGRES_NAMING_CONVENTION
+
+from cortexstone.db.base import POSTGRES_NAMING_CONVENTION, Base, TimestampMixin, utc_now
 from cortexstone.db.session import (
     create_engine_from_url,
     create_session_factory,
@@ -32,7 +34,7 @@ def test_utc_now_timezone_aware():
     now = utc_now()
     assert isinstance(now, datetime)
     assert now.tzinfo is not None
-    assert now.tzinfo == timezone.utc
+    assert now.tzinfo == UTC
 
 
 def test_dummy_model_columns():
@@ -56,6 +58,7 @@ def test_create_engine_empty_url_raises():
 def test_session_factory_creation():
     """Verify session factory configuration with an async engine mock/proxy."""
     from unittest.mock import MagicMock
+
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     mock_engine = MagicMock(spec=AsyncEngine)

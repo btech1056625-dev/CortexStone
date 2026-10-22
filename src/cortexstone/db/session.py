@@ -4,7 +4,8 @@ Provides safe factory functions to build SQLAlchemy async engines and
 sessionmakers without hardcoded secrets or ambient global connections.
 """
 
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,

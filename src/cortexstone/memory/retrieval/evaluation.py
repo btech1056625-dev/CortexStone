@@ -2,25 +2,27 @@
 
 Provides an offline, deterministic evaluation framework to evaluate:
 1. Retrieval Recall (Target: >= 85%): Verifies relevant memory items are retrieved in top-k.
-2. Citation Precision: Verifies retrieved memory items format valid citations [Source: <type>:<ref>].
+2. Citation Precision: Verifies retrieved memory items format valid citations
+   [Source: <type>:<ref>].
 3. Inference Accuracy: Verifies inferred memories carry explicit [INFERRED] indicators.
-4. Tenant Isolation & Soft-Deletion Exclusion: Verifies negative controls (deleted records, foreign owners,
-   and unanswerable queries) do not leak unauthorized or deleted data.
+4. Tenant Isolation & Soft-Deletion Exclusion: Verifies negative controls (deleted records,
+   foreign owners, and unanswerable queries) do not leak unauthorized or deleted data.
 
 Requires zero external API calls, zero API keys, and zero live database connections.
 """
 
 from __future__ import annotations
 
+import builtins
 import json
 import math
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from cortexstone.db.base import utc_now
 from cortexstone.db.models.memory import MemoryItemModel
@@ -39,19 +41,60 @@ from cortexstone.memory.retrieval.retriever import (
 from cortexstone.memory.schemas import (
     MemoryFilter,
     MemoryItemCreate,
-    MemoryItemRead,
     MemoryItemUpdate,
     MemoryKind,
     SensitivityLevel,
 )
 
-
 STOP_WORDS = {
-    "a", "about", "all", "an", "and", "are", "as", "at", "be", "by", "did",
-    "do", "does", "for", "from", "had", "has", "have", "he", "her", "his",
-    "how", "i", "in", "is", "it", "its", "of", "on", "or", "that", "the",
-    "their", "then", "there", "these", "they", "this", "to", "was", "were",
-    "what", "when", "where", "which", "who", "will", "with",
+    "a",
+    "about",
+    "all",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "did",
+    "do",
+    "does",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "he",
+    "her",
+    "his",
+    "how",
+    "i",
+    "in",
+    "is",
+    "it",
+    "its",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "to",
+    "was",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "will",
+    "with",
 }
 
 
@@ -60,7 +103,7 @@ def _stem_word(word: str) -> str:
     w = word.lower()
     for sfx in ("ing", "tion", "tions", "ies", "es", "ed", "s"):
         if w.endswith(sfx) and len(w) - len(sfx) >= 3:
-            return w[:-len(sfx)]
+            return w[: -len(sfx)]
     return w
 
 
@@ -86,7 +129,7 @@ class DeterministicLexicalEmbeddingProvider(EmbeddingProvider):
     def dimension(self) -> int:
         return self._dimension
 
-    def _text_to_vector(self, text: str) -> List[float]:
+    def _text_to_vector(self, text: str) -> list[float]:
         vec = [0.0] * self._dimension
         clean = text.lower().strip()
         if not clean:
@@ -123,16 +166,16 @@ class DeterministicLexicalEmbeddingProvider(EmbeddingProvider):
 
         return vec
 
-    async def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str) -> list[float]:
         return self._text_to_vector(text)
 
-    async def embed_batch(self, texts: List[str]) -> List[List[float]]:
+    async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         return [self._text_to_vector(t) for t in texts]
 
-    async def embed_query(self, query: str) -> List[float]:
+    async def embed_query(self, query: str) -> list[float]:
         return self._text_to_vector(query)
 
-    async def embed_document(self, document: str) -> List[float]:
+    async def embed_document(self, document: str) -> list[float]:
         return self._text_to_vector(document)
 
 
@@ -143,7 +186,7 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
     """
 
     def __init__(self) -> None:
-        self._storage: Dict[UUID, MemoryItemModel] = {}
+        self._storage: dict[UUID, MemoryItemModel] = {}
 
     def seed_model(self, model: MemoryItemModel) -> None:
         """Seed a MemoryItemModel directly into the repository storage."""
@@ -167,7 +210,11 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
             kind=item.kind.value if isinstance(item.kind, MemoryKind) else str(item.kind),
             title=item.title,
             content=item.content,
-            sensitivity=item.sensitivity.value if isinstance(item.sensitivity, SensitivityLevel) else str(item.sensitivity),
+            sensitivity=(
+                item.sensitivity.value
+                if isinstance(item.sensitivity, SensitivityLevel)
+                else str(item.sensitivity)
+            ),
             approved=item.approved,
             source_type=item.source_type,
             source_ref=item.source_ref,
@@ -186,7 +233,7 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
         owner_id: str,
         memory_id: UUID,
         include_deleted: bool = False,
-    ) -> Optional[MemoryItemModel]:
+    ) -> MemoryItemModel | None:
         clean_owner = owner_id.strip() if owner_id else ""
         model = self._storage.get(memory_id)
         if model is None:
@@ -200,13 +247,13 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
     async def list(
         self,
         owner_id: str,
-        filter_params: Optional[MemoryFilter] = None,
-    ) -> List[MemoryItemModel]:
+        filter_params: MemoryFilter | None = None,
+    ) -> builtins.list[MemoryItemModel]:
         clean_owner = owner_id.strip() if owner_id else ""
         if not clean_owner:
             return []
 
-        results: List[MemoryItemModel] = []
+        results: list[MemoryItemModel] = []
         include_deleted = filter_params.include_deleted if filter_params else False
 
         for model in self._storage.values():
@@ -233,8 +280,8 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
 
         # Deterministic sorting: -occurred_at/-created_at, then -created_at, then id
         def sort_key(m: MemoryItemModel):
-            t1 = (m.occurred_at or m.created_at or datetime.min.replace(tzinfo=timezone.utc)).timestamp()
-            t2 = (m.created_at or datetime.min.replace(tzinfo=timezone.utc)).timestamp()
+            t1 = (m.occurred_at or m.created_at or datetime.min.replace(tzinfo=UTC)).timestamp()
+            t2 = (m.created_at or datetime.min.replace(tzinfo=UTC)).timestamp()
             return (-t1, -t2, str(m.id))
 
         results.sort(key=sort_key)
@@ -249,14 +296,16 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
         memory_id: UUID,
         update_data: MemoryItemUpdate,
         allow_approval_change: bool = False,
-    ) -> Optional[MemoryItemModel]:
+    ) -> MemoryItemModel | None:
         model = await self.get_by_id(owner_id, memory_id, include_deleted=False)
         if model is None:
             return None
 
         update_dict = update_data.model_dump(exclude_unset=True)
         if "approved" in update_dict and not allow_approval_change:
-            raise PermissionError("Approval status can only be modified with explicit authorization.")
+            raise PermissionError(
+                "Approval status can only be modified with explicit authorization."
+            )
 
         for key, val in update_dict.items():
             if hasattr(model, key):
@@ -299,8 +348,8 @@ class QuestionEvaluationResult(BaseModel):
     query: str
     category: str
     expect_no_match: bool
-    expected_memory_ids: List[str]
-    retrieved_memory_ids: List[str]
+    expected_memory_ids: list[str]
+    retrieved_memory_ids: list[str]
     recall_pass: bool
     citation_pass: bool
     inference_tag_pass: bool
@@ -324,8 +373,8 @@ class BenchmarkSummary(BaseModel):
     negative_test_accuracy: float
     target_accuracy_threshold: float
     threshold_met: bool
-    category_breakdown: Dict[str, Dict[str, Any]]
-    results: List[QuestionEvaluationResult]
+    category_breakdown: dict[str, dict[str, Any]]
+    results: list[QuestionEvaluationResult]
 
 
 class MemoryRecallBenchmarkHarness:
@@ -333,9 +382,9 @@ class MemoryRecallBenchmarkHarness:
 
     def __init__(
         self,
-        fixture_path: Optional[str | Path] = None,
-        embedding_provider: Optional[EmbeddingProvider] = None,
-        ranking_config: Optional[RankingConfig] = None,
+        fixture_path: str | Path | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        ranking_config: RankingConfig | None = None,
     ) -> None:
         if fixture_path is None:
             # Default to canonical test fixture
@@ -344,7 +393,9 @@ class MemoryRecallBenchmarkHarness:
         else:
             self.fixture_path = Path(fixture_path)
 
-        self.embedding_provider = embedding_provider or DeterministicLexicalEmbeddingProvider(dimension=128)
+        self.embedding_provider = embedding_provider or DeterministicLexicalEmbeddingProvider(
+            dimension=128
+        )
         self.ranking_config = ranking_config or RankingConfig(
             semantic_weight=0.85,
             recency_weight=0.08,
@@ -352,7 +403,7 @@ class MemoryRecallBenchmarkHarness:
             half_life_days=90.0,
         )
 
-        self._raw_fixture: Dict[str, Any] = {}
+        self._raw_fixture: dict[str, Any] = {}
         self.repository = InMemoryMemoryRepository()
         self.retrieval_service = MemoryRetrievalService(
             repository=self.repository,
@@ -360,11 +411,11 @@ class MemoryRecallBenchmarkHarness:
             ranking_config=self.ranking_config,
         )
 
-    def load_fixture(self) -> Dict[str, Any]:
+    def load_fixture(self) -> dict[str, Any]:
         """Load and parse the JSON benchmark fixture."""
         if not self.fixture_path.exists():
             raise FileNotFoundError(f"Benchmark fixture not found at {self.fixture_path}")
-        with open(self.fixture_path, "r", encoding="utf-8") as f:
+        with open(self.fixture_path, encoding="utf-8") as f:
             self._raw_fixture = json.load(f)
         return self._raw_fixture
 
@@ -405,7 +456,11 @@ class MemoryRecallBenchmarkHarness:
                 kind=kind.value if isinstance(kind, MemoryKind) else str(kind),
                 title=title,
                 content=content,
-                sensitivity=sensitivity.value if isinstance(sensitivity, SensitivityLevel) else str(sensitivity),
+                sensitivity=(
+                    sensitivity.value
+                    if isinstance(sensitivity, SensitivityLevel)
+                    else str(sensitivity)
+                ),
                 approved=approved,
                 source_type=source_type,
                 source_ref=source_ref,
@@ -423,7 +478,7 @@ class MemoryRecallBenchmarkHarness:
 
     async def evaluate_question(
         self,
-        question_data: Dict[str, Any],
+        question_data: dict[str, Any],
         target_owner_id: str,
     ) -> QuestionEvaluationResult:
         """Evaluate a single question against the retrieval service."""
@@ -452,7 +507,10 @@ class MemoryRecallBenchmarkHarness:
             # - For deleted memory exclusion: the deleted ID must NOT appear
             # - For cross owner isolation: the other owner's ID must NOT appear
             # - For unanswerable queries: prohibited/leaked IDs must not appear
-            prohibited_ids = {"11111111-1111-1111-1111-111111111109", "22222222-2222-2222-2222-222222222201"}
+            prohibited_ids = {
+                "11111111-1111-1111-1111-111111111109",
+                "22222222-2222-2222-2222-222222222201",
+            }
             if category == "deleted_memory_exclusion":
                 # Ensure memory 1109 is not in retrieved results
                 recall_pass = "11111111-1111-1111-1111-111111111109" not in retrieved_ids
@@ -472,7 +530,9 @@ class MemoryRecallBenchmarkHarness:
         citation_pass = True
         if not expect_no_match and res.items:
             # Find the top result corresponding to expected_ids
-            top_match = next((item for item in res.items if str(item.item.id) in expected_ids), None)
+            top_match = next(
+                (item for item in res.items if str(item.item.id) in expected_ids), None
+            )
             if top_match:
                 item_citation = format_memory_item_citation(top_match.item)
                 # Check valid citation syntax
@@ -487,7 +547,9 @@ class MemoryRecallBenchmarkHarness:
         # 3. Inference tag check
         inference_tag_pass = True
         if not expect_no_match and res.items:
-            top_match = next((item for item in res.items if str(item.item.id) in expected_ids), None)
+            top_match = next(
+                (item for item in res.items if str(item.item.id) in expected_ids), None
+            )
             if top_match:
                 item_citation = format_memory_item_citation(top_match.item)
                 has_inferred_tag = "[INFERRED]" in item_citation
@@ -528,10 +590,10 @@ class MemoryRecallBenchmarkHarness:
         target_threshold = float(meta.get("target_accuracy_threshold", 0.85))
 
         questions = self._raw_fixture.get("questions", [])
-        results: List[QuestionEvaluationResult] = []
+        results: list[QuestionEvaluationResult] = []
 
         # Category trackers
-        cat_counts: Dict[str, Dict[str, int]] = {}
+        cat_counts: dict[str, dict[str, int]] = {}
 
         for q in questions:
             cat = q.get("category", "other")
@@ -571,7 +633,7 @@ class MemoryRecallBenchmarkHarness:
         )
 
         # Build category breakdown
-        category_breakdown: Dict[str, Dict[str, Any]] = {}
+        category_breakdown: dict[str, dict[str, Any]] = {}
         for cat, data in cat_counts.items():
             tot = data["total"]
             pas = data["passed"]

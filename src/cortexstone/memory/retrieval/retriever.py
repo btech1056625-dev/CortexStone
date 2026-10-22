@@ -11,8 +11,6 @@ Executes owner-scoped memory retrieval combining:
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -56,23 +54,24 @@ class RetrievalRequest(BaseModel):
         if not trimmed:
             raise ValueError("Query text must not be blank or whitespace-only.")
         return trimmed
-    kind: Optional[MemoryKind] = Field(
+
+    kind: MemoryKind | None = Field(
         default=None,
         description="Filter by specific memory kind ('fact', 'episode', 'skill').",
     )
-    sensitivity: Optional[SensitivityLevel] = Field(
+    sensitivity: SensitivityLevel | None = Field(
         default=None,
         description="Filter by sensitivity tier.",
     )
-    approved_only: Optional[bool] = Field(
+    approved_only: bool | None = Field(
         default=None,
         description="Filter for approved items (essential for skills).",
     )
-    occurred_after: Optional[datetime] = Field(
+    occurred_after: datetime | None = Field(
         default=None,
         description="Filter events occurred on or after this UTC timestamp.",
     )
-    occurred_before: Optional[datetime] = Field(
+    occurred_before: datetime | None = Field(
         default=None,
         description="Filter events occurred on or before this UTC timestamp.",
     )
@@ -93,7 +92,7 @@ class RetrievalResult(BaseModel):
     query: str
     total_eligible: int
     returned_count: int
-    items: List[MemorySearchResult]
+    items: list[MemorySearchResult]
 
 
 class MemoryRetrieverInterface(ABC):
@@ -104,7 +103,7 @@ class MemoryRetrieverInterface(ABC):
         self,
         owner_id: str,
         request: RetrievalRequest,
-        reference_time: Optional[datetime] = None,
+        reference_time: datetime | None = None,
     ) -> RetrievalResult:
         """Execute owner-scoped memory retrieval.
 
@@ -134,8 +133,8 @@ class MemoryRetrievalService(MemoryRetrieverInterface):
     def __init__(
         self,
         repository: MemoryRepositoryInterface,
-        embedding_provider: Optional[EmbeddingProvider] = None,
-        ranking_config: Optional[RankingConfig] = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        ranking_config: RankingConfig | None = None,
     ) -> None:
         """Initialize the retrieval service.
 
@@ -153,7 +152,7 @@ class MemoryRetrievalService(MemoryRetrieverInterface):
         self,
         owner_id: str,
         request: RetrievalRequest,
-        reference_time: Optional[datetime] = None,
+        reference_time: datetime | None = None,
     ) -> RetrievalResult:
         """Retrieve, rank, and return top-k memory items for the authenticated owner."""
         # 1. Validate owner_id
@@ -200,7 +199,7 @@ class MemoryRetrievalService(MemoryRetrieverInterface):
             reference_time = utc_now()
 
         # 6. Score each candidate
-        scored_candidates: List[tuple[float, MemoryItemModel, Optional[float]]] = []
+        scored_candidates: list[tuple[float, MemoryItemModel, float | None]] = []
 
         for model in candidate_models:
             # Defensive check: ensure no soft-deleted record slipped through
@@ -212,7 +211,7 @@ class MemoryRetrievalService(MemoryRetrieverInterface):
                 continue
 
             # Compute semantic similarity if item has stored embedding
-            sem_sim: Optional[float] = None
+            sem_sim: float | None = None
             if model.embedding is not None:
                 try:
                     # model.embedding may be a list or vector
@@ -238,9 +237,7 @@ class MemoryRetrievalService(MemoryRetrieverInterface):
         # Highest score first (-score), then most recent created_at (-epoch), then id string
         def sort_key(entry):
             score, model, _ = entry
-            created_epoch = (
-                model.created_at.timestamp() if model.created_at else 0.0
-            )
+            created_epoch = model.created_at.timestamp() if model.created_at else 0.0
             return (-score, -created_epoch, str(model.id))
 
         scored_candidates.sort(key=sort_key)
@@ -249,7 +246,7 @@ class MemoryRetrievalService(MemoryRetrieverInterface):
         top_candidates = scored_candidates[: request.top_k]
 
         # 9. Format into domain MemorySearchResult items
-        search_results: List[MemorySearchResult] = []
+        search_results: list[MemorySearchResult] = []
         for score, model, sem_sim in top_candidates:
             read_item = MemoryItemRead.model_validate(model)
             search_results.append(

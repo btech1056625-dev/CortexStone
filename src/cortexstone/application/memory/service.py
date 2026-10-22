@@ -14,7 +14,6 @@ Security & Architectural Invariants:
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -56,7 +55,7 @@ class MemoryExport(BaseModel):
     owner_id: str
     exported_at: datetime
     total_count: int
-    items: List[MemoryItemRead]
+    items: list[MemoryItemRead]
 
 
 class MemoryService:
@@ -65,7 +64,7 @@ class MemoryService:
     def __init__(
         self,
         repository: MemoryRepositoryInterface,
-        audit_logger: Optional[AuditLoggerInterface] = None,
+        audit_logger: AuditLoggerInterface | None = None,
     ) -> None:
         """Initialize MemoryService with injected repository and optional audit logger.
 
@@ -115,7 +114,7 @@ class MemoryService:
         self,
         owner_id: str,
         memory_id: UUID,
-    ) -> Optional[MemoryItemRead]:
+    ) -> MemoryItemRead | None:
         """Retrieve an active memory item by ID for the authenticated owner.
 
         Args:
@@ -141,8 +140,8 @@ class MemoryService:
     async def list_memories(
         self,
         owner_id: str,
-        filter_params: Optional[MemoryFilter] = None,
-    ) -> List[MemoryItemRead]:
+        filter_params: MemoryFilter | None = None,
+    ) -> list[MemoryItemRead]:
         """List active memories for the authenticated owner matching filters.
 
         Args:
@@ -167,7 +166,7 @@ class MemoryService:
         memory_id: UUID,
         update_data: MemoryItemUpdate,
         allow_approval_change: bool = False,
-    ) -> Optional[MemoryItemRead]:
+    ) -> MemoryItemRead | None:
         """Update an existing active memory item.
 
         Args:

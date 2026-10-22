@@ -1,7 +1,6 @@
 """Unit tests for memory context formatting and prompt injection safety."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from cortexstone.memory.retrieval.formatter import (
@@ -13,7 +12,6 @@ from cortexstone.memory.schemas import (
     MemoryKind,
     MemorySearchResult,
     SensitivityLevel,
-    utc_now,
 )
 
 
@@ -28,7 +26,7 @@ def make_search_result(
     occurred_at: datetime = None,
     relevance_score: float = 0.88,
 ) -> MemorySearchResult:
-    dt = occurred_at or datetime(2026, 10, 15, 10, 30, 0, tzinfo=timezone.utc)
+    dt = occurred_at or datetime(2026, 10, 15, 10, 30, 0, tzinfo=UTC)
     item = MemoryItemRead(
         id=uuid4(),
         owner_id="user_test",
@@ -107,9 +105,17 @@ def test_format_memory_context_structured_output():
 
     assert formatted.startswith("<memory_context>")
     assert formatted.endswith("</memory_context>")
-    assert "1. [FACT] [Source: github:issue#101, 2026-10-15 10:30:00Z | Conf: 0.95] [Score: 0.92] - Python Environment" in formatted
+    expected_line1 = (
+        "1. [FACT] [Source: github:issue#101, 2026-10-15 10:30:00Z | Conf: 0.95] "
+        "[Score: 0.92] - Python Environment"
+    )
+    expected_line2 = (
+        "2. [EPISODE] [Source: calendar:meeting_sync, 2026-10-15 10:30:00Z | Conf: 0.95] "
+        "[Score: 0.75]"
+    )
+    assert expected_line1 in formatted
     assert "   Python 3.14 is installed" in formatted
-    assert "2. [EPISODE] [Source: calendar:meeting_sync, 2026-10-15 10:30:00Z | Conf: 0.95] [Score: 0.75]" in formatted
+    assert expected_line2 in formatted
     assert "   Reviewed PR #12 with Raghav" in formatted
     assert "   Approved deployment checklist" in formatted
 

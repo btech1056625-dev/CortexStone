@@ -4,7 +4,6 @@ Enforces mandatory owner scoping, parameterized SQL/ORM expressions,
 deterministic ordering, soft deletion, and verifiable hard deletion.
 """
 
-from typing import List, Optional
 from uuid import UUID
 
 from sqlalchemy import delete, desc, select, update
@@ -79,7 +78,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         owner_id: str,
         memory_id: UUID,
         include_deleted: bool = False,
-    ) -> Optional[MemoryItemModel]:
+    ) -> MemoryItemModel | None:
         """Fetch a single memory item by memory ID scoped to its owner.
 
         Filters strictly by both owner_id and id. Excludes soft-deleted records
@@ -102,8 +101,8 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
     async def list(
         self,
         owner_id: str,
-        filter_params: Optional[MemoryFilter] = None,
-    ) -> List[MemoryItemModel]:
+        filter_params: MemoryFilter | None = None,
+    ) -> list[MemoryItemModel]:
         """List memory items belonging to the owner matching filter criteria.
 
         Always filters by owner_id and excludes deleted records by default.
@@ -115,9 +114,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         if filter_params is None:
             filter_params = MemoryFilter()
 
-        stmt = select(MemoryItemModel).where(
-            MemoryItemModel.owner_id == owner_id.strip()
-        )
+        stmt = select(MemoryItemModel).where(MemoryItemModel.owner_id == owner_id.strip())
 
         # Soft-deletion exclusion
         if not filter_params.include_deleted:
@@ -133,9 +130,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
 
         # Sensitivity filter
         if filter_params.sensitivity is not None:
-            stmt = stmt.where(
-                MemoryItemModel.sensitivity == filter_params.sensitivity.value
-            )
+            stmt = stmt.where(MemoryItemModel.sensitivity == filter_params.sensitivity.value)
 
         # Approved-only filter (e.g. for approved skills)
         if filter_params.approved_only is not None:
@@ -143,14 +138,10 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
 
         # Temporal filters
         if filter_params.occurred_after is not None:
-            stmt = stmt.where(
-                MemoryItemModel.occurred_at >= filter_params.occurred_after
-            )
+            stmt = stmt.where(MemoryItemModel.occurred_at >= filter_params.occurred_after)
 
         if filter_params.occurred_before is not None:
-            stmt = stmt.where(
-                MemoryItemModel.occurred_at <= filter_params.occurred_before
-            )
+            stmt = stmt.where(MemoryItemModel.occurred_at <= filter_params.occurred_before)
 
         # Deterministic ordering
         stmt = stmt.order_by(
@@ -170,7 +161,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         memory_id: UUID,
         update_data: MemoryItemUpdate,
         allow_approval_change: bool = False,
-    ) -> Optional[MemoryItemModel]:
+    ) -> MemoryItemModel | None:
         """Update an existing active memory item owned by owner_id.
 
         Protections:
@@ -217,7 +208,8 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         if update_data.approved is not None:
             if not allow_approval_change:
                 raise PermissionError(
-                    "Changing memory approval status is restricted and requires explicit authorization."
+                    "Changing memory approval status is restricted and requires "
+                    "explicit authorization."
                 )
             target.approved = update_data.approved
 

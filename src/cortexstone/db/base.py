@@ -4,7 +4,8 @@ All SQLAlchemy declarative models inherit from Base.
 Provides audit timestamps (created_at, updated_at) in strict UTC.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from sqlalchemy import MetaData
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.types import DateTime
@@ -21,7 +22,7 @@ POSTGRES_NAMING_CONVENTION = {
 
 def utc_now() -> datetime:
     """Return current UTC timestamp with timezone awareness."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):

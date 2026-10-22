@@ -13,16 +13,14 @@ Deterministic tie-breaking:
 """
 
 import math
-from datetime import datetime, timezone
-from typing import List, Optional
-from uuid import UUID
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from cortexstone.db.base import utc_now
 
 
-def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
+def cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     """Compute cosine similarity between two float vectors.
 
     Args:
@@ -45,7 +43,7 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     dot = 0.0
     norm1 = 0.0
     norm2 = 0.0
-    for a, b in zip(vec1, vec2):
+    for a, b in zip(vec1, vec2, strict=True):
         dot += a * b
         norm1 += a * a
         norm2 += b * b
@@ -92,8 +90,8 @@ class RankingConfig(BaseModel):
 
 
 def compute_recency_score(
-    item_timestamp: Optional[datetime],
-    reference_time: Optional[datetime] = None,
+    item_timestamp: datetime | None,
+    reference_time: datetime | None = None,
     half_life_days: float = 30.0,
 ) -> float:
     """Compute exponential decay recency score in range [0.0, 1.0].
@@ -133,11 +131,11 @@ def compute_recency_score(
 
 
 def compute_composite_score(
-    semantic_similarity: Optional[float],
-    item_timestamp: Optional[datetime],
-    confidence: Optional[float],
+    semantic_similarity: float | None,
+    item_timestamp: datetime | None,
+    confidence: float | None,
     config: RankingConfig,
-    reference_time: Optional[datetime] = None,
+    reference_time: datetime | None = None,
 ) -> float:
     """Calculate the final normalized composite ranking score.
 
@@ -149,9 +147,7 @@ def compute_composite_score(
 
     The total weight sum normalizes the final score to [0.0, 1.0].
     """
-    total_weight = (
-        config.semantic_weight + config.recency_weight + config.confidence_weight
-    )
+    total_weight = config.semantic_weight + config.recency_weight + config.confidence_weight
     if total_weight <= 0.0:
         return 0.0
 

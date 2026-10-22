@@ -6,7 +6,7 @@ Audit events record metadata only (who, when, what event, which record ID, statu
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,7 +30,7 @@ class AuditEvent(BaseModel):
         ...,
         description="Authenticated owner identity.",
     )
-    resource_id: Optional[UUID] = Field(
+    resource_id: UUID | None = Field(
         default=None,
         description="ID of the resource being acted upon.",
     )
@@ -42,7 +42,7 @@ class AuditEvent(BaseModel):
         default="success",
         description="Status of the operation: 'success', 'failure', 'rejected'.",
     )
-    details: Dict[str, Any] = Field(
+    details: dict[str, Any] = Field(
         default_factory=dict,
         description="Content-free metadata (e.g. kind, reason code, verification status).",
     )

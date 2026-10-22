@@ -5,13 +5,13 @@ without freezing a specific model ID or dimension integer.
 """
 
 import math
-from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
 
+from pydantic import BaseModel, ConfigDict, Field
 
 # -----------------------------------------------------------------------------
 # 1. Domain Exceptions for Embedding Operations
 # -----------------------------------------------------------------------------
+
 
 class EmbeddingError(Exception):
     """Base exception for all embedding-related errors.
@@ -36,7 +36,9 @@ class EmbeddingDimensionMismatchError(EmbeddingError, ValueError):
 
 
 class InvalidEmbeddingVectorError(EmbeddingError, ValueError):
-    """Raised when an embedding vector is empty, contains non-finite values (NaN/inf), or zero magnitude."""
+    """Raised when an embedding vector is empty, contains non-finite values (NaN/inf),
+    or zero magnitude.
+    """
 
 
 class EmbeddingProviderError(EmbeddingError, RuntimeError):
@@ -46,6 +48,7 @@ class EmbeddingProviderError(EmbeddingError, RuntimeError):
 # -----------------------------------------------------------------------------
 # 2. Provider-Independent Configuration Abstraction
 # -----------------------------------------------------------------------------
+
 
 class EmbeddingConfig(BaseModel):
     """Typed configuration for an embedding provider.
@@ -64,7 +67,9 @@ class EmbeddingConfig(BaseModel):
     model_id: str = Field(
         ...,
         min_length=1,
-        description="Exact model identifier (e.g., 'Qwen/Qwen3-Embedding-8B', 'BAAI/bge-small-en-v1.5').",
+        description=(
+            "Exact model identifier (e.g., 'Qwen/Qwen3-Embedding-8B', 'BAAI/bge-small-en-v1.5')."
+        ),
     )
     dimension: int = Field(
         ...,
@@ -88,9 +93,10 @@ class EmbeddingConfig(BaseModel):
 # 3. Vector Validation and Normalization Utilities
 # -----------------------------------------------------------------------------
 
+
 def validate_embedding_vector(
-    vector: List[float],
-    expected_dimension: Optional[int] = None,
+    vector: list[float],
+    expected_dimension: int | None = None,
 ) -> None:
     """Validate an embedding vector's dimension and numerical integrity.
 
@@ -127,9 +133,9 @@ def validate_embedding_vector(
 
 
 def normalize_embedding_vector(
-    vector: List[float],
-    expected_dimension: Optional[int] = None,
-) -> List[float]:
+    vector: list[float],
+    expected_dimension: int | None = None,
+) -> list[float]:
     """Produce a unit-length (L2-normalized) embedding vector.
 
     Validates:

@@ -9,24 +9,18 @@ Verifies:
 """
 
 import math
-import pytest
-from datetime import datetime, timezone
-from pathlib import Path
-from uuid import uuid4
 
-from cortexstone.db.models.memory import MemoryItemModel
+import pytest
+
 from cortexstone.memory.retrieval.evaluation import (
     BenchmarkSummary,
     DeterministicLexicalEmbeddingProvider,
     InMemoryMemoryRepository,
     MemoryRecallBenchmarkHarness,
-    QuestionEvaluationResult,
 )
 from cortexstone.memory.retrieval.ranking import cosine_similarity
 from cortexstone.memory.schemas import (
-    MemoryFilter,
     MemoryItemCreate,
-    MemoryItemUpdate,
     MemoryKind,
     MemoryProvenance,
     SensitivityLevel,
@@ -101,7 +95,9 @@ async def test_in_memory_repository_owner_scoping_and_soft_delete():
     assert len(await repo.list(owner_id=owner_a)) == 0
 
     # include_deleted=True returns it
-    model_retrieved = await repo.get_by_id(owner_id=owner_a, memory_id=model_a.id, include_deleted=True)
+    model_retrieved = await repo.get_by_id(
+        owner_id=owner_a, memory_id=model_a.id, include_deleted=True
+    )
     assert model_retrieved is not None
     assert model_retrieved.deleted_at is not None
 
@@ -165,7 +161,7 @@ async def test_full_benchmark_execution():
     }
     assert set(summary.category_breakdown.keys()) == expected_categories
 
-    for cat_name, cat_data in summary.category_breakdown.items():
+    for cat_data in summary.category_breakdown.values():
         assert cat_data["total"] > 0
         assert 0.0 <= cat_data["accuracy"] <= 1.0
 

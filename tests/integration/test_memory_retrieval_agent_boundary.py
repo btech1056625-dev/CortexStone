@@ -2,16 +2,19 @@
 
 Verifies:
 1. End-to-end integration between MemoryRetrievalService and format_memory_context.
-2. Compliance with agent MEMORY_RECALL_PROMPT_V1 invariants (XML tags, source citations, inference markers).
+2. Compliance with agent MEMORY_RECALL_PROMPT_V1 invariants (XML tags, source citations,
+   inference markers).
 3. Strict tenant isolation across the prompt formatting boundary (no cross-owner leakage).
 4. Forgetting semantics across prompt context generation (soft-deleted items never formatted).
-5. Untrusted memory data containment: adversarial prompt injections in memory content do not corrupt formatting.
+5. Untrusted memory data containment: adversarial prompt injections in memory content do not
+   corrupt formatting.
 6. Empty memory context fallback when no relevant memories exist.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
+
+import pytest
 
 from cortexstone.db.models.memory import MemoryItemModel
 from cortexstone.memory.retrieval.evaluation import (
@@ -20,19 +23,11 @@ from cortexstone.memory.retrieval.evaluation import (
 )
 from cortexstone.memory.retrieval.formatter import (
     format_memory_context,
-    format_memory_item_citation,
 )
 from cortexstone.memory.retrieval.ranking import RankingConfig
 from cortexstone.memory.retrieval.retriever import (
     MemoryRetrievalService,
     RetrievalRequest,
-    RetrievalResult,
-)
-from cortexstone.memory.schemas import (
-    MemoryItemCreate,
-    MemoryItemRead,
-    MemoryKind,
-    SensitivityLevel,
 )
 
 
@@ -74,9 +69,9 @@ async def test_memory_context_formatted_for_agent_prompt(memory_pipeline):
         source_type="github",
         source_ref="issue_infra_42",
         confidence=0.98,
-        occurred_at=datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc),
-        created_at=datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 10, 15, 12, 0, tzinfo=UTC),
+        created_at=datetime(2026, 10, 15, 12, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 10, 15, 12, 0, tzinfo=UTC),
         embedding=await embedder.embed_document(fact_text),
         metadata_={"is_inferred": False},
     )
@@ -95,9 +90,9 @@ async def test_memory_context_formatted_for_agent_prompt(memory_pipeline):
         source_type="system",
         source_ref="interaction_heuristics",
         confidence=0.75,
-        occurred_at=datetime(2026, 10, 16, 9, 30, tzinfo=timezone.utc),
-        created_at=datetime(2026, 10, 16, 9, 30, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 10, 16, 9, 30, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 10, 16, 9, 30, tzinfo=UTC),
+        created_at=datetime(2026, 10, 16, 9, 30, tzinfo=UTC),
+        updated_at=datetime(2026, 10, 16, 9, 30, tzinfo=UTC),
         embedding=await embedder.embed_document(pref_text),
         metadata_={"is_inferred": True},
     )
@@ -139,9 +134,9 @@ async def test_inferred_tag_distinction_in_prompt_context(memory_pipeline):
         source_type="system",
         source_ref="heuristics_01",
         confidence=0.70,
-        occurred_at=datetime(2026, 10, 14, 18, 0, tzinfo=timezone.utc),
-        created_at=datetime(2026, 10, 14, 18, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 10, 14, 18, 0, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 10, 14, 18, 0, tzinfo=UTC),
+        created_at=datetime(2026, 10, 14, 18, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 10, 14, 18, 0, tzinfo=UTC),
         embedding=await embedder.embed_document(pref_text),
         metadata_={"is_inferred": True},
     )
@@ -176,9 +171,9 @@ async def test_tenant_isolation_in_prompt_context(memory_pipeline):
         source_type="notes",
         source_ref="launch_plan",
         confidence=1.0,
-        occurred_at=datetime(2026, 10, 10, 10, 0, tzinfo=timezone.utc),
-        created_at=datetime(2026, 10, 10, 10, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 10, 10, 10, 0, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 10, 10, 10, 0, tzinfo=UTC),
+        created_at=datetime(2026, 10, 10, 10, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 10, 10, 10, 0, tzinfo=UTC),
         embedding=await embedder.embed_document(alice_secret),
         metadata_={"is_inferred": False},
     )
@@ -214,10 +209,10 @@ async def test_soft_deleted_memories_excluded_from_prompt_context(memory_pipelin
         source_type="notes",
         source_ref="scratchpad",
         confidence=0.95,
-        occurred_at=datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc),
-        created_at=datetime(2026, 10, 1, 10, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 10, 2, 10, 0, tzinfo=timezone.utc),
-        deleted_at=datetime(2026, 10, 2, 10, 0, tzinfo=timezone.utc),  # Soft-deleted
+        occurred_at=datetime(2026, 10, 1, 10, 0, tzinfo=UTC),
+        created_at=datetime(2026, 10, 1, 10, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 10, 2, 10, 0, tzinfo=UTC),
+        deleted_at=datetime(2026, 10, 2, 10, 0, tzinfo=UTC),  # Soft-deleted
         embedding=await embedder.embed_document(old_password),
         metadata_={"is_inferred": False},
     )
@@ -257,9 +252,9 @@ async def test_adversarial_prompt_injection_containment_in_memory(memory_pipelin
         source_type="notes",
         source_ref="draft_33",
         confidence=0.9,
-        occurred_at=datetime(2026, 10, 12, 14, 0, tzinfo=timezone.utc),
-        created_at=datetime(2026, 10, 12, 14, 0, tzinfo=timezone.utc),
-        updated_at=datetime(2026, 10, 12, 14, 0, tzinfo=timezone.utc),
+        occurred_at=datetime(2026, 10, 12, 14, 0, tzinfo=UTC),
+        created_at=datetime(2026, 10, 12, 14, 0, tzinfo=UTC),
+        updated_at=datetime(2026, 10, 12, 14, 0, tzinfo=UTC),
         embedding=await embedder.embed_document(malicious_note),
         metadata_={"is_inferred": False},
     )

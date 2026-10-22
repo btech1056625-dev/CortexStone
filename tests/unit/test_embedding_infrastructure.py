@@ -1,25 +1,21 @@
 """Unit tests for embedding configuration, vector validation, normalization, and exceptions."""
 
-import math
 import pytest
 from pydantic import ValidationError
 
 from cortexstone.memory.embeddings.base import EmbeddingProvider
 from cortexstone.memory.embeddings.config import (
     EmbeddingConfig,
-    EmbeddingConfigurationError,
     EmbeddingDimensionMismatchError,
-    EmbeddingError,
-    EmbeddingProviderError,
     InvalidEmbeddingVectorError,
     normalize_embedding_vector,
     validate_embedding_vector,
 )
 
-
 # -----------------------------------------------------------------------------
 # 1. Configuration Model Tests
 # -----------------------------------------------------------------------------
+
 
 def test_embedding_config_valid():
     """Verify valid EmbeddingConfig construction."""
@@ -56,6 +52,7 @@ def test_embedding_config_defaults_and_validation():
 # 2. Vector Validation Tests
 # -----------------------------------------------------------------------------
 
+
 def test_validate_vector_valid():
     """Verify valid vector passes dimension validation."""
     vec = [0.1, 0.2, 0.3, 0.4]
@@ -64,7 +61,9 @@ def test_validate_vector_valid():
 
 
 def test_validate_vector_dimension_mismatch():
-    """Verify mismatch between actual and expected dimension raises EmbeddingDimensionMismatchError."""
+    """Verify mismatch between actual and expected dimension raises
+    EmbeddingDimensionMismatchError.
+    """
     vec = [0.1, 0.2]
     with pytest.raises(EmbeddingDimensionMismatchError) as exc_info:
         validate_embedding_vector(vec, expected_dimension=4)
@@ -95,6 +94,7 @@ def test_validate_vector_non_finite_raises():
 # 3. Vector Normalization Tests
 # -----------------------------------------------------------------------------
 
+
 def test_normalize_vector_success():
     """Verify normalization produces unit-length vector."""
     vec = [3.0, 4.0]
@@ -123,6 +123,7 @@ def test_normalize_vector_zero_magnitude_raises():
 # -----------------------------------------------------------------------------
 # 4. Query vs Document Interface Compatibility
 # -----------------------------------------------------------------------------
+
 
 class MinimalDummyProvider(EmbeddingProvider):
     """Subclass implementing only required abstract methods."""

@@ -1,20 +1,21 @@
 """Unit tests for MemoryRetrievalService pipeline, validation, and filters."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 from uuid import uuid4
+
+import pytest
+from pydantic import ValidationError
 
 from cortexstone.db.models.memory import MemoryItemModel
 from cortexstone.memory.embeddings.base import EmbeddingProvider
 from cortexstone.memory.repositories.base import MemoryRepositoryInterface
+from cortexstone.memory.retrieval.ranking import RankingConfig
 from cortexstone.memory.retrieval.retriever import (
     MemoryRetrievalService,
     RetrievalRequest,
-    RetrievalResult,
 )
-from cortexstone.memory.retrieval.ranking import RankingConfig
-from cortexstone.memory.schemas import MemoryKind, SensitivityLevel, utc_now
+from cortexstone.memory.schemas import MemoryKind, utc_now
 
 
 class FakeDeterministicEmbeddingProvider(EmbeddingProvider):
@@ -36,7 +37,7 @@ class FakeDeterministicEmbeddingProvider(EmbeddingProvider):
         if self._fixed is not None:
             return self._fixed
         # Generate predictable normalized vector based on length
-        return [1.0 / (self._dim ** 0.5)] * self._dim
+        return [1.0 / (self._dim**0.5)] * self._dim
 
     async def embed_batch(self, texts):
         return [await self.embed_text(t) for t in texts]
@@ -75,6 +76,7 @@ def make_candidate_model(
 # 1. Pipeline Validation Tests
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.anyio
 async def test_retrieve_missing_provider_raises_error():
     """Verify retrieval raises explicit RuntimeError if no EmbeddingProvider is configured."""
@@ -100,12 +102,8 @@ async def test_retrieve_empty_owner_id_raises():
 
 @pytest.mark.anyio
 async def test_retrieve_empty_query_raises():
-    """Verify empty or whitespace query is rejected by Pydantic schema or service."""
-    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
-    provider = FakeDeterministicEmbeddingProvider()
-    service = MemoryRetrievalService(repository=mock_repo, embedding_provider=provider)
-
-    with pytest.raises(Exception):
+    """Verify empty or whitespace query is rejected by Pydantic schema."""
+    with pytest.raises(ValidationError):
         RetrievalRequest(query="   ")
 
 
@@ -125,6 +123,7 @@ async def test_retrieve_dimension_mismatch_raises():
 # -----------------------------------------------------------------------------
 # 2. Owner Scoping, Deletion Exclusion, and Filter Delegation
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_retrieve_propagates_owner_id_and_filters():
@@ -160,7 +159,9 @@ async def test_retrieve_defensively_excludes_deleted_and_other_owners():
     mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
     provider = FakeDeterministicEmbeddingProvider(dimension=2, fixed_vector=[1.0, 0.0])
 
-    m_valid = make_candidate_model(owner_id="user_target", content="Valid memory", embedding=[1.0, 0.0])
+    m_valid = make_candidate_model(
+        owner_id="user_target", content="Valid memory", embedding=[1.0, 0.0]
+    )
     m_deleted = make_candidate_model(
         owner_id="user_target",
         content="Deleted memory",
@@ -189,6 +190,7 @@ async def test_retrieve_defensively_excludes_deleted_and_other_owners():
 # 3. Ranking, Bounded Top-K, and Deterministic Tie-Breaking
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.anyio
 async def test_retrieve_bounded_top_k_and_ranking_order():
     """Verify top-k bounding and that closer semantic vectors rank higher."""
@@ -196,7 +198,7 @@ async def test_retrieve_bounded_top_k_and_ranking_order():
     # Query vector is [1.0, 0.0]
     provider = FakeDeterministicEmbeddingProvider(dimension=2, fixed_vector=[1.0, 0.0])
 
-    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=UTC)
 
     # Candidate 1: Identical vector [1.0, 0.0] -> sim = 1.0
     m_high = make_candidate_model(
@@ -243,16 +245,22 @@ async def test_retrieve_deterministic_tie_breaking():
     mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
     provider = FakeDeterministicEmbeddingProvider(dimension=2, fixed_vector=[1.0, 0.0])
 
-    t_earlier = datetime(2026, 10, 21, 10, 0, 0, tzinfo=timezone.utc)
-    t_later = datetime(2026, 10, 21, 11, 0, 0, tzinfo=timezone.utc)
+    t_earlier = datetime(2026, 10, 21, 10, 0, 0, tzinfo=UTC)
+    t_later = datetime(2026, 10, 21, 11, 0, 0, tzinfo=UTC)
 
-    m1 = make_candidate_model(owner_id="u1", content="Earlier", embedding=[1.0, 0.0], created_at=t_earlier)
-    m2 = make_candidate_model(owner_id="u1", content="Later", embedding=[1.0, 0.0], created_at=t_later)
+    m1 = make_candidate_model(
+        owner_id="u1", content="Earlier", embedding=[1.0, 0.0], created_at=t_earlier
+    )
+    m2 = make_candidate_model(
+        owner_id="u1", content="Later", embedding=[1.0, 0.0], created_at=t_later
+    )
 
     mock_repo.list.return_value = [m1, m2]
     # Set weights to only test recency/tie-break
     config = RankingConfig(semantic_weight=1.0, recency_weight=0.0, confidence_weight=0.0)
-    service = MemoryRetrievalService(repository=mock_repo, embedding_provider=provider, ranking_config=config)
+    service = MemoryRetrievalService(
+        repository=mock_repo, embedding_provider=provider, ranking_config=config
+    )
 
     req = RetrievalRequest(query="test", top_k=2)
     res = await service.retrieve(owner_id="u1", request=req)

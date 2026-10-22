@@ -1,9 +1,10 @@
 """Unit tests for application-level MemoryService and verifiable forgetting."""
 
-import pytest
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 from uuid import uuid4
+
+import pytest
 
 from cortexstone.application.memory.service import (
     DeletionReceipt,
@@ -21,7 +22,7 @@ from cortexstone.memory.schemas import (
     SensitivityLevel,
     utc_now,
 )
-from cortexstone.security.audit.service import AuditEvent, InMemoryAuditLogger
+from cortexstone.security.audit.service import InMemoryAuditLogger
 
 
 def create_fake_model(
@@ -51,6 +52,7 @@ def create_fake_model(
 # -----------------------------------------------------------------------------
 # 1. Create, Get, List, and Update Delegation Tests
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_create_memory_delegates_and_logs_audit():
@@ -180,6 +182,7 @@ async def test_update_memory_delegates_and_respects_approval():
 # 2. Verifiable Forgetting Workflow Tests
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.anyio
 async def test_forget_memory_success_and_receipt_content_free():
     """Verify forget_memory verifies exclusion, returns content-free receipt, and logs audit."""
@@ -242,7 +245,7 @@ async def test_forget_memory_idempotent_already_forgotten():
     """Verify forget_memory is idempotent if record is already deleted."""
     mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
     mem_id = uuid4()
-    del_time = datetime(2026, 10, 20, 10, 0, 0, tzinfo=timezone.utc)
+    del_time = datetime(2026, 10, 20, 10, 0, 0, tzinfo=UTC)
 
     already_deleted = create_fake_model(
         owner_id="user_1",
@@ -275,6 +278,7 @@ async def test_forget_memory_not_found():
 # -----------------------------------------------------------------------------
 # 3. Export Operations
 # -----------------------------------------------------------------------------
+
 
 @pytest.mark.anyio
 async def test_export_memories_owner_scoped_and_bounded():

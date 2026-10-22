@@ -1,28 +1,26 @@
 """Unit tests for Memory domain schemas, SQLAlchemy models, and Embedding interface."""
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import pytest
-from datetime import datetime, timezone
-from uuid import UUID, uuid4
 from pydantic import ValidationError
 
-from cortexstone.memory.schemas import (
-    MemoryKind,
-    SensitivityLevel,
-    MemoryProvenance,
-    MemoryItemCreate,
-    MemoryItemUpdate,
-    MemoryItemRead,
-    MemorySearchResult,
-    MemoryFilter,
-    utc_now,
-)
 from cortexstone.db.models.memory import MemoryItemModel
 from cortexstone.memory.embeddings.base import EmbeddingProvider
-
+from cortexstone.memory.schemas import (
+    MemoryFilter,
+    MemoryItemCreate,
+    MemoryItemRead,
+    MemoryKind,
+    SensitivityLevel,
+    utc_now,
+)
 
 # -----------------------------------------------------------------------------
 # 1. Domain Schema Tests (MemoryKind, SensitivityLevel, Provenance, Validation)
 # -----------------------------------------------------------------------------
+
 
 def test_memory_kind_enums():
     """Verify supported memory kinds."""
@@ -79,14 +77,16 @@ def test_content_non_empty_validation():
 def test_timestamp_timezone_awareness():
     """Verify occurred_at and filter timestamps require timezone awareness."""
     naive_dt = datetime(2026, 10, 21, 12, 0, 0)
-    aware_dt = datetime(2026, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
+    aware_dt = datetime(2026, 10, 21, 12, 0, 0, tzinfo=UTC)
 
     # Naive timestamp should fail validation
     with pytest.raises(ValidationError, match="timezone-aware"):
         MemoryItemCreate(kind=MemoryKind.EPISODE, content="Morning checkin", occurred_at=naive_dt)
 
     # Timezone-aware succeeds
-    item = MemoryItemCreate(kind=MemoryKind.EPISODE, content="Morning checkin", occurred_at=aware_dt)
+    item = MemoryItemCreate(
+        kind=MemoryKind.EPISODE, content="Morning checkin", occurred_at=aware_dt
+    )
     assert item.occurred_at == aware_dt
 
 
@@ -127,6 +127,7 @@ def test_memory_filter_deleted_items_default():
 # -----------------------------------------------------------------------------
 # 2. SQLAlchemy Model Metadata Tests (Table, Columns, Constraints, Indexes)
 # -----------------------------------------------------------------------------
+
 
 def test_memory_model_table_structure():
     """Verify SQLAlchemy MemoryItemModel table columns and types."""
@@ -179,7 +180,8 @@ def test_memory_model_indexes():
 
 def test_models_init_import():
     """Verify MemoryItemModel is exported cleanly from cortexstone.db.models."""
-    from cortexstone.db.models import Base, TimestampMixin, MemoryItemModel, utc_now
+    from cortexstone.db.models import Base, MemoryItemModel, TimestampMixin
+
     assert MemoryItemModel is not None
     assert issubclass(MemoryItemModel, Base)
     assert issubclass(MemoryItemModel, TimestampMixin)
@@ -188,6 +190,7 @@ def test_models_init_import():
 # -----------------------------------------------------------------------------
 # 3. Embedding Interface Tests
 # -----------------------------------------------------------------------------
+
 
 class MockEmbeddingProvider(EmbeddingProvider):
     """Mock implementation of EmbeddingProvider for interface verification."""

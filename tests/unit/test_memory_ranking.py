@@ -1,8 +1,8 @@
 """Unit tests for memory retrieval ranking formulas and scoring logic."""
 
-import math
+from datetime import UTC, datetime, timedelta
+
 import pytest
-from datetime import datetime, timedelta, timezone
 
 from cortexstone.memory.retrieval.ranking import (
     RankingConfig,
@@ -49,14 +49,14 @@ def test_cosine_similarity_empty_vectors_raises():
 
 def test_compute_recency_score_exact_now():
     """Verify recency score at delta=0 is 1.0."""
-    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=UTC)
     score = compute_recency_score(item_timestamp=now, reference_time=now, half_life_days=30.0)
     assert pytest.approx(score, 1e-6) == 1.0
 
 
 def test_compute_recency_score_half_life():
     """Verify recency score after exactly 30 days equals 0.5."""
-    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=UTC)
     t_past = now - timedelta(days=30)
     score = compute_recency_score(item_timestamp=t_past, reference_time=now, half_life_days=30.0)
     assert pytest.approx(score, 1e-6) == 0.5
@@ -84,7 +84,7 @@ def test_compute_composite_score_normalization():
         half_life_days=30.0,
         default_confidence=0.5,
     )
-    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 21, 12, 0, 0, tzinfo=UTC)
 
     # Maximum possible score: sim=1.0, recency=1.0, confidence=1.0 -> 1.0
     max_score = compute_composite_score(
@@ -96,7 +96,8 @@ def test_compute_composite_score_normalization():
     )
     assert pytest.approx(max_score, 1e-5) == 1.0
 
-    # Minimum possible score: sim=-1.0 (norm_sim=0.0), no timestamp (recency=0.0), confidence=0.0 -> 0.0
+    # Minimum possible score: sim=-1.0 (norm_sim=0.0), no timestamp (recency=0.0),
+    # confidence=0.0 -> 0.0
     min_score = compute_composite_score(
         semantic_similarity=-1.0,
         item_timestamp=None,
