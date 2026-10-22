@@ -11,7 +11,6 @@ class MockModelResponse:
     """Mock container representing the structured LLM response."""
 
     def __init__(self, plan_dict: dict):
-        # Instantiate AgentPlan from dict so .parsed has real attributes
         self.parsed = AgentPlan(**plan_dict) if plan_dict else None
         self.raw_content = "{}"
 
@@ -29,9 +28,8 @@ class MockModelClient:
         return MockModelResponse(self.parsed_fixture)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_orchestrator_returns_agent_plan():
-    # Setup mock return data with valid AgentPlan fields
     mock_client = MockModelClient(
         parsed_fixture={
             "summary": "Fixing the leaked security key",
@@ -48,7 +46,6 @@ async def test_orchestrator_returns_agent_plan():
 
     orchestrator = AgentOrchestrator(model_client=mock_client)
 
-    # Patch the IntentRouter so it triggers the Reasoner model block
     with patch.object(orchestrator.router, "route", new_callable=AsyncMock) as mock_route:
         mock_route.return_value = RouteDecision(
             intent=IntentCategory.TOOL_ACTION,
@@ -59,13 +56,12 @@ async def test_orchestrator_returns_agent_plan():
 
         res = await orchestrator.run("Fix the secret leak", context=[])
 
-    # Assert the response is a list of proposed actions
     assert isinstance(res, list)
     assert len(res) == 1
     assert res[0].tool_name == "github.create_draft_pr"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_orchestrator_direct_chat_returns_empty_actions():
     mock_client = MockModelClient()
     orchestrator = AgentOrchestrator(model_client=mock_client)

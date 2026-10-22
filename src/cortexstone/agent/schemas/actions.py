@@ -32,6 +32,10 @@ TargetRef = Annotated[
     str,
     StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=512),
 ]
+ActionPurpose = Annotated[
+    str,
+    StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=1000),
+]
 
 
 class ProposedAction(BaseModel):
@@ -55,11 +59,9 @@ class ProposedAction(BaseModel):
     arguments: dict[str, Any] = Field(
         default_factory=dict, description="Explicit parameters required by the tool"
     )
-    purpose: str = Field(
-        max_length=1000,
-        description="Clear, truthful explanation of why this action is required",
+    purpose: ActionPurpose = Field(
+        description="Clear, truthful explanation of why this action is required"
     )
-    purpose: str = Field(description="Clear, truthful explanation of why this action is required")
     idempotency_key: str | None = Field(
         default=None,
         description="Unique key ensuring safe replay without duplicate side-effects",
