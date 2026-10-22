@@ -14,9 +14,24 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+
+ToolName = Annotated[
+    str,
+    StringConstraints(
+        strict=True,
+        strip_whitespace=True,
+        min_length=1,
+        max_length=128,
+        pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$",
+    ),
+]
+TargetRef = Annotated[
+    str,
+    StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=512),
+]
 
 
 class ProposedAction(BaseModel):
@@ -40,7 +55,10 @@ class ProposedAction(BaseModel):
     arguments: dict[str, Any] = Field(
         default_factory=dict, description="Explicit parameters required by the tool"
     )
-    purpose: str = Field(description="Clear, truthful explanation of why this action is required")
+    purpose: str = Field(
+        max_length=1000,
+        description="Clear, truthful explanation of why this action is required",
+    )
     idempotency_key: str | None = Field(
         default=None,
         description="Unique key ensuring safe replay without duplicate side-effects",
@@ -68,8 +86,4 @@ class AgentPlan(BaseModel):
         default_factory=list,
         max_length=5,  # Bounded execution: maximum 5 steps per planning cycle
         description="Ordered sequence of proposed actions",
-    )
-    requires_user_approval: bool = Field(
-        default=True,
-        description="Flag indicating if any action in the plan is expected to need human approval",
     )
