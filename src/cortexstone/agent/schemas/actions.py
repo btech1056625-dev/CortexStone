@@ -25,16 +25,12 @@ ToolName = Annotated[
         strip_whitespace=True,
         min_length=1,
         max_length=128,
-        pattern=r"^[a-z][a-z0-9_.-]*$",
+        pattern=r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$",
     ),
 ]
 TargetRef = Annotated[
     str,
     StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=512),
-]
-ActionPurpose = Annotated[
-    str,
-    StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=1000),
 ]
 
 
@@ -47,7 +43,8 @@ class ProposedAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action_id: uuid.UUID = Field(
-        default_factory=uuid.uuid4, description="Unique identifier for this action proposal"
+        default_factory=uuid.uuid4,
+        description="Unique identifier for this action proposal",
     )
     tool_name: ToolName = Field(
         description="Registered tool identifier (e.g., 'github.create_draft_pr', 'notes.search')"
@@ -58,14 +55,17 @@ class ProposedAction(BaseModel):
     arguments: dict[str, Any] = Field(
         default_factory=dict, description="Explicit parameters required by the tool"
     )
-    purpose: ActionPurpose = Field(
-        description="Clear, truthful explanation of why this action is required"
+    purpose: str = Field(
+        max_length=1000,
+        description="Clear, truthful explanation of why this action is required",
     )
     idempotency_key: str | None = Field(
-        default=None, description="Unique key ensuring safe replay without duplicate side-effects"
+        default=None,
+        description="Unique key ensuring safe replay without duplicate side-effects",
     )
     requested_at: datetime = Field(
-        default_factory=lambda: datetime.now(UTC), description="Timestamp of the action proposal"
+        default_factory=lambda: datetime.now(UTC),
+        description="Timestamp of the action proposal",
     )
 
 

@@ -4,24 +4,28 @@ src/cortexstone/agent/models/interface.py
 Defines the provider-neutral ModelClient contract, domain types,
 and model-layer exceptions for Cortexstone.
 """
+
 from __future__ import annotations
 
 import enum
 from dataclasses import dataclass, field
-from typing import Any, Generic, Protocol, TypeVar, runtime_checkable
+from typing import Protocol, TypeVar, runtime_checkable
+
 from pydantic import BaseModel
 
 T = TypeVar("T", bound=BaseModel)
 
 
-class ModelRole(str, enum.Enum):
+class ModelRole(enum.StrEnum):
     """Identifies the operational tier for model routing."""
-    ROUTER = "router"      # Nemotron Mini: Intent classification & complexity routing
+
+    ROUTER = "router"  # Nemotron Mini: Intent classification & complexity routing
     REASONER = "reasoner"  # Nemotron 3 Super 120B A12B: Complex reasoning and planning
 
 
-class Role(str, enum.Enum):
+class Role(enum.StrEnum):
     """Chat message roles."""
+
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
@@ -31,6 +35,7 @@ class Role(str, enum.Enum):
 @dataclass(frozen=True)
 class ModelMessage:
     """A single bounded message within a model inference request."""
+
     role: Role
     content: str
     name: str | None = None
@@ -45,6 +50,7 @@ class ModelMessage:
 @dataclass
 class UsageMetadata:
     """Token consumption and latency tracking for inference calls."""
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
@@ -52,8 +58,9 @@ class UsageMetadata:
 
 
 @dataclass
-class ModelResponse(Generic[T]):
+class ModelResponse[T: BaseModel]:
     """Parsed model response with execution metadata."""
+
     raw_content: str
     parsed: T | None = None
     model_id: str = ""
@@ -62,6 +69,7 @@ class ModelResponse(Generic[T]):
 
 
 # --- Exceptions ---
+
 
 class ModelError(Exception):
     """Base exception for all model operations."""

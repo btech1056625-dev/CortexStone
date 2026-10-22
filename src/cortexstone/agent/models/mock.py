@@ -4,16 +4,18 @@ src/cortexstone/agent/models/mock.py
 MockModelClient for offline testing, CI/CD, and fast verification
 without burning Nebius Token Factory credits.
 """
+
 from __future__ import annotations
 
 from typing import Any, TypeVar
+
 from pydantic import BaseModel
 
 from cortexstone.agent.models.interface import (
     ModelClient,
-    ModelRole,
     ModelMessage,
     ModelResponse,
+    ModelRole,
     UsageMetadata,
 )
 
@@ -68,14 +70,16 @@ class MockModelClient(ModelClient):
         if self.simulate_error is not None:
             raise self.simulate_error
 
-        self.recorded_calls.append({
-            "model_id": model_id or "mock-model",
-            "messages": messages,
-            "schema": schema,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "timeout": timeout,
-        })
+        self.recorded_calls.append(
+            {
+                "model_id": model_id or "mock-model",
+                "messages": messages,
+                "schema": schema,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "timeout": timeout,
+            }
+        )
 
         parsed: T | None = None
         if schema is not None and self.parsed_fixture is not None:

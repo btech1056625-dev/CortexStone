@@ -46,6 +46,7 @@ from cortexstone.agent.models import ModelClient, ModelRole
 from cortexstone.agent.orchestration.router import IntentRouter
 from cortexstone.agent.schemas import RouteDecision, AgentPlan, ProposedAction
 
+
 class AgentOrchestrator:
     def __init__(self, model_client: ModelClient):
         self.model_client = model_client
@@ -54,7 +55,7 @@ class AgentOrchestrator:
     async def run(self, user_message: str, context: list[dict]) -> list[ProposedAction]:
         # Step 1: Fast triage via Nemotron Mini
         route: RouteDecision = await self.router.route(user_message)
-        
+
         # Step 2: Route to heavy reasoner if planning is required
         if route.needs_reasoner:
             resp = await self.model_client.generate_for_role(
