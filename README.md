@@ -1,6 +1,6 @@
 # Cortexstone
 
-Cortexstone is a private assistant built around three product pillars: **Remember, Act, Protect**. This repository is organized as a modular monolith: domain modules share one codebase and explicit contracts, while the API, worker, and scheduler are separate runtime entry points that can be tested and deployed independently.
+Cortexstone is a private assistant built around three product pillars: **Remember, Act, Protect**. This repository is organized as a modular monolith: domain modules share one codebase and explicit contracts, while the API, worker, and scheduler are separate runtime entry points that can be tested and deployed independently
 
 ## Repository map
 

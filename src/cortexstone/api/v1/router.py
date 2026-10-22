@@ -2,9 +2,14 @@
 
 import logging
 import os
+from typing import Annotated
 
 import psycopg
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from cortexstone.api.dependencies import get_policy_engine, get_policy_principal
+from cortexstone.api.v1.schemas import ActionValidationRequest, ActionValidationResponse
+from cortexstone.security.policy import PolicyEngine, PolicyPrincipal
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +20,20 @@ operational_router = APIRouter(tags=["health"])
 @router.get("/health", tags=["health"])
 def versioned_health() -> dict[str, str]:
     return {"status": "ok", "api_version": "v1"}
+
+
+@router.post(
+    "/actions/validate",
+    response_model=ActionValidationResponse,
+    tags=["actions"],
+)
+def validate_proposed_action(
+    request: ActionValidationRequest,
+    policy_engine: Annotated[PolicyEngine, Depends(get_policy_engine)],
+    principal: Annotated[PolicyPrincipal, Depends(get_policy_principal)],
+) -> ActionValidationResponse:
+    decision = policy_engine.evaluate(principal, request.action)
+    return ActionValidationResponse.from_decision(decision)
 
 
 @operational_router.get("/health/live")
