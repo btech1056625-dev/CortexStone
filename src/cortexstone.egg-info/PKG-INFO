@@ -1,0 +1,54 @@
+Metadata-Version: 2.2
+Name: cortexstone
+Version: 0.1.0
+Summary: A personal assistant built around Remember, Act, and Protect.
+Requires-Python: <3.14,>=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: psycopg[binary]<4,>=3.2
+Requires-Dist: uvicorn[standard]<1,>=0.34
+Provides-Extra: dev
+Requires-Dist: httpx<1,>=0.28; extra == "dev"
+Requires-Dist: pytest<9,>=8.3; extra == "dev"
+Requires-Dist: ruff<1,>=0.11; extra == "dev"
+
+# Cortexstone
+
+Cortexstone is a private assistant built around three product pillars: **Remember, Act, Protect**. This repository is organized as a modular monolith: domain modules share one codebase and explicit contracts, while the API, worker, and scheduler are separate runtime entry points that can be tested and deployed independently.
+
+## Repository map
+
+```text
+apps/                 Independently runnable API, worker, and scheduler processes
+src/cortexstone/      Product package: API, application, domain, adapters, and infrastructure
+frontend/dashboard/   User-facing dashboard; framework choice remains open
+tests/                Unit, integration, security, reliability, and shared fixtures
+deploy/               Local composition, container, and Nebius deployment assets
+docs/                 Architecture notes, threat model, and operational runbooks
+Documentations/       Product requirements, system design, and team rules
+```
+
+The README files in the scaffolded directories describe their intended responsibilities and the work that belongs there. They are planning notes, not claims that the components are implemented.
+
+## Architecture guardrails
+
+- The model proposes; deterministic backend policy authorizes; the restricted runner executes; verification establishes the result.
+- Keep provider, agent runtime, sandbox, and connector integrations behind replaceable adapters.
+- Persist jobs, approvals, and product state. Keep retries bounded and side effects idempotent or independently verified.
+- Default connector access to read-only. Revalidate permission and action-bound approval immediately before execution.
+- Keep raw secrets out of model context, logs, audit events, notifications, and persisted Guardian evidence.
+- Report success only after a tool result or independent verification.
+- Do not split modules into services without a deliberate architecture decision supported by operational needs.
+
+## Source documents
+
+- [Product Requirements Document](./Documentations/Cortexstone_PRD.md)
+- [System Architecture, HLD & LLD](./Documentations/Cortexstone_Architecture_HLD_LLD.md)
+- [Agent Rules](./Documentations/AGENT_RULES.md)
+- [Design Rules](./Documentations/DESIGN_RULES.md)
+
+## Implementation status
+
+The repository now includes a minimal FastAPI bootstrap, PostgreSQL/pgvector Compose development environment, and CI checks. Product workflows, database migrations, authentication, and production deployment are not implemented yet.
+
+See [development setup and API integration conventions](./docs/DEVELOPMENT.md) to start the local environment and run checks.

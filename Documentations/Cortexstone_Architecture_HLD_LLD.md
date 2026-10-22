@@ -156,7 +156,7 @@ Use PostgreSQL + pgvector, UUID IDs, UTC timestamps, foreign keys and owner-scop
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE memory_items (
- id UUID PRIMARY KEY, owner_id TEXT NOT NULL,
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL,
  kind TEXT NOT NULL CHECK (kind IN ('fact','episode','skill')),
  title TEXT, content TEXT NOT NULL, embedding VECTOR(EMBEDDING_DIMENSION),
  source_type TEXT, source_ref TEXT, occurred_at TIMESTAMPTZ,
@@ -167,7 +167,7 @@ CREATE TABLE memory_items (
 );
 CREATE INDEX memory_owner_kind_idx ON memory_items(owner_id,kind) WHERE deleted_at IS NULL;
 CREATE TABLE jobs (
- id UUID PRIMARY KEY, owner_id TEXT NOT NULL, job_type TEXT NOT NULL,
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, job_type TEXT NOT NULL,
  status TEXT NOT NULL, schedule_at TIMESTAMPTZ,
  idempotency_key TEXT NOT NULL UNIQUE, checkpoint JSONB NOT NULL DEFAULT '{}',
  attempts INT NOT NULL DEFAULT 0, max_attempts INT NOT NULL DEFAULT 3,
@@ -175,18 +175,18 @@ CREATE TABLE jobs (
  created_at TIMESTAMPTZ NOT NULL DEFAULT now(), updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE action_runs (
- id UUID PRIMARY KEY, job_id UUID REFERENCES jobs(id), tool_name TEXT NOT NULL,
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), job_id UUID REFERENCES jobs(id), tool_name TEXT NOT NULL,
  target_ref TEXT NOT NULL, action_hash TEXT NOT NULL, status TEXT NOT NULL,
  approval_id UUID, result_summary TEXT, error_code TEXT,
  started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE tool_permissions (
- id UUID PRIMARY KEY, owner_id TEXT NOT NULL, tool_name TEXT NOT NULL,
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, tool_name TEXT NOT NULL,
  scope TEXT NOT NULL, granted BOOLEAN NOT NULL DEFAULT FALSE,
  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(), UNIQUE(owner_id,tool_name,scope)
 );
 CREATE TABLE approvals (
- id UUID PRIMARY KEY, owner_id TEXT NOT NULL, action_hash TEXT NOT NULL,
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, action_hash TEXT NOT NULL,
  target_ref TEXT NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending','approved','rejected','expired','revoked')),
  expires_at TIMESTAMPTZ NOT NULL, decided_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -196,13 +196,13 @@ CREATE TABLE audit_events (
  occurred_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE security_findings (
- id UUID PRIMARY KEY, owner_id TEXT NOT NULL, repository_ref TEXT NOT NULL,
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), owner_id TEXT NOT NULL, repository_ref TEXT NOT NULL,
  finding_type TEXT NOT NULL, severity TEXT NOT NULL, redacted_evidence JSONB NOT NULL,
  status TEXT NOT NULL DEFAULT 'open', remediation_url TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
-**Schema notes:** replace `EMBEDDING_DIMENSION` with a concrete integer; add a delivery/outbox table if Telegram delivery must survive crashes; add side-effect idempotency constraints; keep audit append-only; add/enforce `owner_id` in all user-owned queries. At MVP scale, exact vector search may be sufficient.
+**Schema notes:** UUID primary keys default to PostgreSQL's built-in `gen_random_uuid()` so inserts can omit IDs; the application may still provide explicit UUIDs when needed. `audit_events.id` uses `BIGSERIAL`, which is already generated automatically. Replace `EMBEDDING_DIMENSION` with a concrete integer; add a delivery/outbox table if Telegram delivery must survive crashes; add side-effect idempotency constraints; keep audit append-only; add/enforce `owner_id` in all user-owned queries. At MVP scale, exact vector search may be sufficient.
 
 ### 3.5 REST API contract
 All endpoints use `/api/v1`, JSON, typed schemas, UTC timestamps, owner-scoped authorization and consistent errors.
@@ -298,7 +298,7 @@ Never blindly retry a non-idempotent external write. Check provider operation ID
 |---|---|---|---|
 | Siddharth | Product Manager | Scope, journeys, priorities, acceptance, demo | Backlog, acceptance matrix, decision log, demo script |
 | Bhavya | Backend Developer / Infra (DevOps) | Architecture integration, FastAPI, deployment, CI/CD, config/secrets, health | Running environments, API integration, deploy files, runbooks |
-| Fonseca | QA Tester / Backend Developer | Test strategy, fixtures, integration/reliability tests, connector support | pytest suites, seeded fixtures, test reports, bug reproductions |
+| Fonseca | QA Tester / Backend Developer | Test strategy, fixtures, integration/reliability tests, connector support | pytest suites, seeded fixtures, test reports, bug reproductions |      
 | Archis Samanta | ML/DL — Agents Core | Model evaluation, prompts, context assembly, structured output | Model adapter/eval set, prompt/schema versions, quality report |
 | Himanshu | Agentic AI — Agents Core | Orchestration/planning, typed proposals, runtime adapter | Orchestrator, action contracts, bounded loop, agent tests |
 | Apurva | DB Admin — Memory | PostgreSQL/pgvector, migrations, retrieval, provenance, forget, backup | Schema/migrations, memory repository, retrieval benchmark |
