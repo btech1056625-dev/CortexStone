@@ -22,7 +22,6 @@ from cortexstone.memory.retrieval.ranking import cosine_similarity
 from cortexstone.memory.schemas import (
     MemoryItemCreate,
     MemoryKind,
-    MemoryProvenance,
     SensitivityLevel,
 )
 
@@ -68,7 +67,8 @@ async def test_in_memory_repository_owner_scoping_and_soft_delete():
         kind=MemoryKind.FACT,
         title="Project Name",
         content="Project is CortexStone",
-        provenance=MemoryProvenance(source_type="user_direct", source_ref="init"),
+        source_type="user_direct",
+        source_ref="init",
         sensitivity=SensitivityLevel.NORMAL,
     )
     model_a = await repo.create(owner_id=owner_a, item=create_payload)

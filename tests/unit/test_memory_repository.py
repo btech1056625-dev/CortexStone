@@ -57,8 +57,34 @@ async def test_create_assigns_supplied_owner_id():
     assert created_model.kind == "fact"
     assert created_model.content == "User likes dark mode"
     assert created_model.confidence == 0.9
+    assert created_model.approved is False
     assert mock_session.add.called
     assert mock_session.flush.called
+
+
+@pytest.mark.anyio
+async def test_create_skill_always_defaults_approved_false():
+    """Verify creating a skill always sets approved=False in repository logic."""
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    repo = SqlAlchemyMemoryRepository(mock_session)
+
+    skill_in = MemoryItemCreate(
+        kind=MemoryKind.SKILL,
+        content="Run bash command inside sandbox",
+    )
+    created_skill = await repo.create(owner_id="user_admin", item=skill_in)
+    assert created_skill.kind == "skill"
+    assert created_skill.approved is False
+
+    # Non-skill creation also initializes approved=False
+    fact_in = MemoryItemCreate(
+        kind=MemoryKind.FACT,
+        content="User time zone is America/New_York",
+    )
+    created_fact = await repo.create(owner_id="user_admin", item=fact_in)
+    assert created_fact.kind == "fact"
+    assert created_fact.approved is False
 
 
 @pytest.mark.anyio

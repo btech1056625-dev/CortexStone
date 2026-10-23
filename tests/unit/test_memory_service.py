@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from cortexstone.application.memory.service import (
     DeletionReceipt,
@@ -97,6 +98,36 @@ async def test_create_memory_rejects_empty_owner_id():
     create_in = MemoryItemCreate(kind=MemoryKind.FACT, content="test")
     with pytest.raises(ValueError, match="owner_id must be a non-empty string"):
         await service.create_memory(owner_id="   ", item=create_in)
+
+
+@pytest.mark.anyio
+async def test_create_skill_memory_defaults_unapproved():
+    """Verify creating a skill memory always yields approved=False domain model."""
+    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
+    skill_model = create_fake_model(owner_id="user_sec", kind="skill", approved=False)
+    mock_repo.create.return_value = skill_model
+
+    service = MemoryService(repository=mock_repo)
+    create_in = MemoryItemCreate(
+        kind=MemoryKind.SKILL,
+        content="Deploy smart contract to testnet",
+    )
+    result = await service.create_memory(owner_id="user_sec", item=create_in)
+
+    assert result.kind == MemoryKind.SKILL
+    assert result.approved is False
+    mock_repo.create.assert_called_once_with(owner_id="user_sec", item=create_in)
+
+
+@pytest.mark.anyio
+async def test_create_memory_rejects_caller_supplied_approved():
+    """Verify callers cannot inject approved=True when creating a skill or fact."""
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        MemoryItemCreate(
+            kind=MemoryKind.SKILL,
+            content="Privileged task",
+            approved=True,  # type: ignore
+        )
 
 
 @pytest.mark.anyio

@@ -115,9 +115,15 @@ class MemoryItemBase(BaseModel):
 class MemoryItemCreate(MemoryItemBase):
     """Payload for creating a new memory record.
 
-    Note: owner_id is NOT accepted from client request bodies. It must be
-    supplied by the authenticated session in the service/repository layer.
+    Note:
+    - owner_id is NOT accepted from client request bodies. It must be
+      supplied by the authenticated session in the service/repository layer.
+    - approved is NOT accepted from caller payloads. All newly created records
+      (especially executable skills) default to unapproved (approved=False).
+      Approval must only be granted through explicit authorized approval workflows.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     source_type: str | None = Field(default=None)
     source_ref: str | None = Field(default=None)
@@ -125,11 +131,6 @@ class MemoryItemCreate(MemoryItemBase):
     is_inferred: bool = Field(
         default=False,
         description="True if derived by model inference; False if explicitly user-stated.",
-    )
-    # Skills default to unapproved. Client cannot self-approve on creation.
-    approved: bool = Field(
-        default=False,
-        description="Whether a skill is approved for execution. Default is False.",
     )
 
 

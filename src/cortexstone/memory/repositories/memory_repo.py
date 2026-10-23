@@ -55,6 +55,12 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         if item.is_inferred:
             metadata_dict["is_inferred"] = True
 
+        # Security invariant: newly created records (especially executable skills)
+        # must never be self-approved on creation. Regardless of caller input,
+        # newly created memory records are always initialized with approved=False.
+        # Approval may only be granted through explicit authorized approval workflows.
+        approved = False
+
         model = MemoryItemModel(
             owner_id=owner_id.strip(),
             kind=item.kind.value,
@@ -65,7 +71,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
             occurred_at=item.occurred_at,
             confidence=item.confidence,
             sensitivity=item.sensitivity.value,
-            approved=item.approved,
+            approved=approved,
             metadata_=metadata_dict,
         )
 

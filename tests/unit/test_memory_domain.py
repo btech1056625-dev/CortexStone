@@ -110,12 +110,31 @@ def test_provenance_and_inference_distinction():
 
 
 def test_skill_approval_default_and_immutability_on_create():
-    """Verify skills default to unapproved (approved=False)."""
+    """Verify MemoryItemCreate rejects caller-supplied approved field and skills
+    cannot self-approve.
+    """
     skill_item = MemoryItemCreate(
         kind=MemoryKind.SKILL,
         content="Run security audit on git repository",
     )
-    assert skill_item.approved is False
+    # approved is not a caller-controlled field on creation
+    assert "approved" not in MemoryItemCreate.model_fields
+    assert hasattr(skill_item, "approved") is False
+
+    # Callers cannot supply approved=True or approved=False on creation (extra forbidden)
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        MemoryItemCreate(
+            kind=MemoryKind.SKILL,
+            content="Run security audit on git repository",
+            approved=True,  # type: ignore
+        )
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        MemoryItemCreate(
+            kind=MemoryKind.FACT,
+            content="Normal fact",
+            approved=True,  # type: ignore
+        )
 
 
 def test_memory_filter_deleted_items_default():

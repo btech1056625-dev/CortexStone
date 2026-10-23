@@ -215,7 +215,7 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
                 if isinstance(item.sensitivity, SensitivityLevel)
                 else str(item.sensitivity)
             ),
-            approved=item.approved,
+            approved=False,
             source_type=item.source_type,
             source_ref=item.source_ref,
             confidence=item.confidence,
