@@ -1,9 +1,11 @@
 """Backend policy validation for proposed actions."""
 
-from cortexstone.security.policy.service import (
+from cortexstone.security.policy.engine import (
     ActionScope,
     ApprovalEvidence,
+    ApprovalService,
     PermissionGrant,
+    PermissionService,
     PolicyDecision,
     PolicyEngine,
     PolicyPrincipal,
@@ -16,7 +18,9 @@ from cortexstone.security.policy.service import (
 __all__ = [
     "ActionScope",
     "ApprovalEvidence",
+    "ApprovalService",
     "PermissionGrant",
+    "PermissionService",
     "PolicyDecision",
     "PolicyEngine",
     "PolicyPrincipal",
