@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Self
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Settings(BaseModel):
@@ -13,7 +13,16 @@ class Settings(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    database_url: str | None = Field(default=None, repr=False)
     notes_search_allowed_targets: tuple[str, ...] = ()
+
+    @field_validator("database_url")
+    @classmethod
+    def validate_database_url(cls, database_url: str | None) -> str | None:
+        if database_url is None:
+            return None
+        database_url = database_url.strip()
+        return database_url or None
 
     @field_validator("notes_search_allowed_targets")
     @classmethod
@@ -27,6 +36,7 @@ class Settings(BaseModel):
     @classmethod
     def from_environment(cls) -> Self:
         """Read the API's supported environment configuration."""
+        database_url = os.getenv("DATABASE_URL")
         raw_targets = os.getenv("CORTEXSTONE_POLICY_NOTES_SEARCH_TARGETS", "")
         targets = tuple(target.strip() for target in raw_targets.split(",") if target.strip())
-        return cls(notes_search_allowed_targets=targets)
+        return cls(database_url=database_url, notes_search_allowed_targets=targets)

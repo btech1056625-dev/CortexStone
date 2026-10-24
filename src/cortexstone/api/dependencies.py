@@ -1,7 +1,12 @@
 """FastAPI dependencies for policy services and trusted identity context."""
 
-from fastapi import HTTPException, Request, status
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
+from fastapi import HTTPException, Request, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from cortexstone.db.session import get_db_session as yield_db_session
 from cortexstone.security.policy import (
     ActionScope,
     PolicyEngine,
@@ -9,6 +14,19 @@ from cortexstone.security.policy import (
     RiskLevel,
     ToolPolicy,
 )
+
+
+async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
+    """Yield a request-scoped SQLAlchemy session from the application factory."""
+    session_factory = request.app.state.db_session_factory
+    if session_factory is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database is not configured.",
+        )
+
+    async with asynccontextmanager(yield_db_session)(session_factory) as session:
+        yield session
 
 
 def get_policy_engine(request: Request) -> PolicyEngine:

@@ -1,11 +1,11 @@
 """Version 1 and operational health routes."""
 
 import logging
-import os
 from typing import Annotated
 
-import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from cortexstone.api.dependencies import get_policy_engine, get_policy_principal
 from cortexstone.api.v1.schemas import ActionValidationRequest, ActionValidationResponse
@@ -42,9 +42,9 @@ def liveness() -> dict[str, str]:
 
 
 @operational_router.get("/health/ready")
-def readiness(request: Request) -> dict[str, str]:
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
+async def readiness(request: Request) -> dict[str, str]:
+    engine = request.app.state.db_engine
+    if engine is None:
         logger.error(
             "Readiness check failed: DATABASE_URL is not configured",
             extra={"request_id": request.state.request_id},
@@ -55,9 +55,9 @@ def readiness(request: Request) -> dict[str, str]:
         )
 
     try:
-        with psycopg.connect(database_url, connect_timeout=2) as connection:
-            connection.execute("SELECT 1")
-    except psycopg.Error as exc:
+        async with engine.connect() as connection:
+            await connection.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
         logger.error(
             "Database readiness check failed (%s)",
             type(exc).__name__,

@@ -1,17 +1,21 @@
 """FastAPI application entry point."""
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cortexstone.api.config import Settings
 from cortexstone.api.dependencies import build_policy_engine
 from cortexstone.api.v1.router import operational_router
 from cortexstone.api.v1.router import router as v1_router
+from cortexstone.db.session import create_engine_from_url, create_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +23,21 @@ logger = logging.getLogger(__name__)
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create the API with validated settings and application-scoped services."""
     configured_settings = settings or Settings.from_environment()
+
+    engine: AsyncEngine | None = None
+    session_factory: async_sessionmaker[AsyncSession] | None = None
+    if configured_settings.database_url is not None:
+        engine = create_engine_from_url(configured_settings.database_url)
+        session_factory = create_session_factory(engine)
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        try:
+            yield
+        finally:
+            if engine is not None:
+                await engine.dispose()
+
     application = FastAPI(
         title="Cortexstone API",
         description="Cortexstone backend API.",
@@ -26,8 +45,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url="/api/v1/openapi.json",
         docs_url="/api/v1/docs",
         redoc_url=None,
+        lifespan=lifespan,
     )
     application.state.settings = configured_settings
+    application.state.db_engine = engine
+    application.state.db_session_factory = session_factory
     application.state.policy_engine = build_policy_engine(
         configured_settings.notes_search_allowed_targets
     )
