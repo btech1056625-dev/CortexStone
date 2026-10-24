@@ -288,12 +288,14 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
             )
             try:
                 res = await self._session.execute(stmt)
-                rows = res.all()
-                return [(row[0], round(1.0 - float(row[1]), 4)) for row in rows]
             except Exception:
                 # If native vector operator execution fails (e.g. SQLite engine in unit tests),
                 # fallback to in-memory cosine ranking below
-                pass
+                res = None
+
+            if res is not None:
+                rows = res.all()
+                return [(row[0], round(1.0 - float(row[1]), 4)) for row in rows]
 
         # Fallback for SQLite / test environments without native vector functions
         stmt = (

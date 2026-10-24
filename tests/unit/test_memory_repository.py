@@ -392,8 +392,10 @@ async def test_search_semantic_pgvector_query_structure():
         owner_id="user_search",
         kind="fact",
         content="Sample content",
+        embedding=[0.1] * 384,
     )
     mock_res.all.return_value = [(fake_model, 0.15)]
+    mock_res.scalars.return_value.all.return_value = [fake_model]
     mock_session.execute.return_value = mock_res
     repo = SqlAlchemyMemoryRepository(mock_session)
 
