@@ -5,7 +5,11 @@ normalization utilities, and domain exceptions.
 """
 
 from cortexstone.memory.embeddings.base import EmbeddingProvider
+from cortexstone.memory.embeddings.bge import BGEEmbeddingProvider
 from cortexstone.memory.embeddings.config import (
+    BGE_SMALL_DIMENSION,
+    BGE_SMALL_MODEL_ID,
+    BGE_SMALL_QUERY_INSTRUCTION,
     EmbeddingConfig,
     EmbeddingConfigurationError,
     EmbeddingDimensionMismatchError,
@@ -18,6 +22,10 @@ from cortexstone.memory.embeddings.config import (
 
 __all__ = [
     "EmbeddingProvider",
+    "BGEEmbeddingProvider",
+    "BGE_SMALL_MODEL_ID",
+    "BGE_SMALL_DIMENSION",
+    "BGE_SMALL_QUERY_INSTRUCTION",
     "EmbeddingConfig",
     "EmbeddingError",
     "EmbeddingConfigurationError",

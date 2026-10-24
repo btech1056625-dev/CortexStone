@@ -22,6 +22,9 @@ dependencies = [
 postgres = [
     "pgvector>=0.2.5",
 ]
+embeddings = [
+    "fastembed>=0.4.0",
+]
 dev = [
     "httpx>=0.28,<1",
     "pytest>=8.3,<9",

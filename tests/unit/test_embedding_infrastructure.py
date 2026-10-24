@@ -5,6 +5,9 @@ from pydantic import ValidationError
 
 from cortexstone.memory.embeddings.base import EmbeddingProvider
 from cortexstone.memory.embeddings.config import (
+    BGE_SMALL_DIMENSION,
+    BGE_SMALL_MODEL_ID,
+    BGE_SMALL_QUERY_INSTRUCTION,
     EmbeddingConfig,
     EmbeddingDimensionMismatchError,
     InvalidEmbeddingVectorError,
@@ -46,6 +49,17 @@ def test_embedding_config_defaults_and_validation():
     # Reject non-positive dimension
     with pytest.raises(ValidationError):
         EmbeddingConfig(provider_id="test", model_id="test", dimension=0)
+
+
+def test_embedding_config_centralized_defaults():
+    """Verify default EmbeddingConfig matches centralized BGE-small-en-v1.5 constants."""
+    cfg = EmbeddingConfig()
+    assert cfg.provider_id == "fastembed"
+    assert cfg.model_id == BGE_SMALL_MODEL_ID
+    assert cfg.dimension == BGE_SMALL_DIMENSION
+    assert cfg.query_instruction == BGE_SMALL_QUERY_INSTRUCTION
+    assert cfg.batch_size == 32
+    assert cfg.request_timeout_seconds == 30.0
 
 
 # -----------------------------------------------------------------------------
