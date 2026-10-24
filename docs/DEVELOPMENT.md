@@ -12,7 +12,7 @@ Requirements: Python 3.12 or 3.13, Docker Desktop with its Linux engine running,
    docker compose up --build
    ```
 
-   The API is available at `http://localhost:8000`; PostgreSQL is available to host tools at `localhost:5432`.
+   The API is available at `http://localhost:8000`; PostgreSQL is available to host tools at `localhost:5433` by default.
 3. Check liveness and readiness:
 
    ```powershell
@@ -23,7 +23,7 @@ Requirements: Python 3.12 or 3.13, Docker Desktop with its Linux engine running,
 4. Open the versioned API docs at `http://localhost:8000/api/v1/docs`.
 5. Stop the services with `docker compose down`. The named `postgres_data` volume preserves database data. `docker compose down --volumes` removes that local data.
 
-To run the API from the host instead, install the project and development tools, start only PostgreSQL with `docker compose up -d db`, then set `DATABASE_URL` in the shell to `postgresql://cortexstone:local-dev-only@localhost:5432/cortexstone` and run:
+To run the API from the host instead, install the project and development tools, start only PostgreSQL with `docker compose up -d db`, then set `DATABASE_URL` in the shell to `postgresql://cortexstone:local-dev-only@localhost:5433/cortexstone` and run:
 
 ```powershell
 py -m venv .venv
@@ -32,7 +32,7 @@ py -m pip install --editable ".[dev]"
 py -m uvicorn cortexstone.api.main:app --reload
 ```
 
-Run checks with `ruff check .`, `ruff format --check .`, and `pytest`. Compose reads `.env` for database and port settings; the host-run API reads `DATABASE_URL` from its process environment.
+Run checks with `ruff check .`, `ruff format --check .`, and `pytest`. Compose reads `.env` for database and port settings; the host-run API reads `DATABASE_URL` from its process environment. The API converts standard `postgresql://` URLs to SQLAlchemy's asynchronous asyncpg dialect, creates an application-scoped engine and session factory, and disposes the engine on shutdown. Routes should inject `get_db_session` from `cortexstone.api.dependencies`; each request receives a closed session, and exceptions roll back the active transaction. `/health/ready` checks the configured database through that SQLAlchemy engine; `/health/live` does not require PostgreSQL.
 
 ## API and integration conventions
 

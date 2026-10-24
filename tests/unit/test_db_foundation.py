@@ -55,6 +55,12 @@ def test_create_engine_empty_url_raises():
         create_engine_from_url("")
 
 
+def test_create_engine_uses_asyncpg_for_postgresql_url():
+    engine = create_engine_from_url("postgresql://user:password@localhost/cortexstone")
+
+    assert engine.url.drivername == "postgresql+asyncpg"
+
+
 def test_session_factory_creation():
     """Verify session factory configuration with an async engine mock/proxy."""
     from unittest.mock import MagicMock

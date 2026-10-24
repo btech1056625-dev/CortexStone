@@ -14,12 +14,12 @@ dependencies = [
     "uvicorn[standard]>=0.34,<1",
     "pydantic>=2.7.0",
     "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29.0",
     "alembic>=1.13.0",
 ]
 
 [project.optional-dependencies]
 postgres = [
-    "asyncpg>=0.29.0",
     "pgvector>=0.2.5",
 ]
 dev = [

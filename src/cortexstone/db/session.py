@@ -6,12 +6,21 @@ sessionmakers without hardcoded secrets or ambient global connections.
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+
+
+def _async_database_url(database_url: str) -> str | URL:
+    """Select asyncpg for standard PostgreSQL URLs."""
+    parsed_url = make_url(database_url)
+    if parsed_url.drivername == "postgresql":
+        return parsed_url.set(drivername="postgresql+asyncpg")
+    return database_url
 
 
 def create_engine_from_url(
@@ -24,7 +33,7 @@ def create_engine_from_url(
     """Create and configure an asynchronous SQLAlchemy engine.
 
     Args:
-        database_url: The database connection URL (e.g., postgresql+asyncpg://...).
+        database_url: A PostgreSQL URL; plain postgresql:// URLs use asyncpg.
         echo: If True, log generated SQL queries (do not enable in production).
         pool_size: Base connection pool size.
         max_overflow: Maximum connections allowed beyond pool_size.
@@ -37,7 +46,7 @@ def create_engine_from_url(
         raise ValueError("database_url must be provided and non-empty.")
 
     return create_async_engine(
-        database_url,
+        _async_database_url(database_url),
         echo=echo,
         pool_size=pool_size,
         max_overflow=max_overflow,
