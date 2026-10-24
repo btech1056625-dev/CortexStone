@@ -330,3 +330,104 @@ async def test_hard_delete_statement_includes_owner_id():
 async def test_interface_compliance():
     """Verify SqlAlchemyMemoryRepository adheres to MemoryRepositoryInterface."""
     assert issubclass(SqlAlchemyMemoryRepository, MemoryRepositoryInterface)
+
+
+# -----------------------------------------------------------------------------
+# 6. Vector Embedding and Semantic Search Tests
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_create_stores_embedding():
+    """Verify create assigns pre-computed embedding vector to model."""
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    repo = SqlAlchemyMemoryRepository(mock_session)
+    embedding = [0.05] * 384
+
+    item_in = MemoryItemCreate(
+        kind=MemoryKind.FACT,
+        content="User prefers Python 3.12",
+    )
+    created = await repo.create(owner_id="user_embed", item=item_in, embedding=embedding)
+    assert created.owner_id == "user_embed"
+    assert created.embedding == embedding
+
+
+@pytest.mark.anyio
+async def test_update_updates_embedding():
+    """Verify update refreshes embedding vector when provided."""
+    mock_session = AsyncMock()
+    existing = MemoryItemModel(
+        id=uuid4(),
+        owner_id="user_embed",
+        kind="fact",
+        content="Old content",
+        sensitivity="normal",
+        embedding=[0.01] * 384,
+    )
+    repo = SqlAlchemyMemoryRepository(mock_session)
+    repo.get_by_id = AsyncMock(return_value=existing)
+
+    new_embedding = [0.99] * 384
+    update_in = MemoryItemUpdate(content="Updated content")
+    updated = await repo.update(
+        owner_id="user_embed",
+        memory_id=existing.id,
+        update_data=update_in,
+        embedding=new_embedding,
+    )
+    assert updated is not None
+    assert updated.content == "Updated content"
+    assert updated.embedding == new_embedding
+
+
+@pytest.mark.anyio
+async def test_search_semantic_pgvector_query_structure():
+    """Verify search_semantic generates owner-scoped SQL with pgvector distance operator."""
+    mock_session = AsyncMock()
+    mock_res = MagicMock()
+    fake_model = MemoryItemModel(
+        id=uuid4(),
+        owner_id="user_search",
+        kind="fact",
+        content="Sample content",
+    )
+    mock_res.all.return_value = [(fake_model, 0.15)]
+    mock_session.execute.return_value = mock_res
+    repo = SqlAlchemyMemoryRepository(mock_session)
+
+    results = await repo.search_semantic(
+        owner_id="user_search",
+        query_vector=[0.1] * 384,
+        top_k=5,
+    )
+    assert len(results) == 1
+    assert results[0][0].id == fake_model.id
+    assert results[0][1] == 0.85  # 1.0 - 0.15
+
+    stmt = mock_session.execute.call_args[0][0]
+    sql_str = get_compiled_sql(stmt)
+    assert "memory_items.owner_id = 'user_search'" in sql_str
+    assert "memory_items.deleted_at IS NULL" in sql_str
+    assert "<=>" in sql_str
+    assert "LIMIT 5" in sql_str
+
+
+@pytest.mark.anyio
+async def test_search_semantic_empty_owner_returns_empty():
+    """Verify search_semantic returns empty list on blank owner."""
+    mock_session = AsyncMock()
+    repo = SqlAlchemyMemoryRepository(mock_session)
+    res = await repo.search_semantic(owner_id="  ", query_vector=[0.1] * 384)
+    assert res == []
+    assert not mock_session.execute.called
+
+
+@pytest.mark.anyio
+async def test_search_semantic_empty_query_raises_value_error():
+    """Verify search_semantic raises ValueError on empty query vector."""
+    mock_session = AsyncMock()
+    repo = SqlAlchemyMemoryRepository(mock_session)
+    with pytest.raises(ValueError, match="query_vector must not be empty"):
+        await repo.search_semantic(owner_id="user_1", query_vector=[])

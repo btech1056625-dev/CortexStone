@@ -196,6 +196,7 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
         self,
         owner_id: str,
         item: MemoryItemCreate,
+        embedding: list[float] | None = None,
     ) -> MemoryItemModel:
         if not owner_id or not owner_id.strip():
             raise ValueError("owner_id must be a non-empty string.")
@@ -210,6 +211,7 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
             kind=item.kind.value if isinstance(item.kind, MemoryKind) else str(item.kind),
             title=item.title,
             content=item.content,
+            embedding=embedding,
             sensitivity=(
                 item.sensitivity.value
                 if isinstance(item.sensitivity, SensitivityLevel)
@@ -296,6 +298,7 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
         memory_id: UUID,
         update_data: MemoryItemUpdate,
         allow_approval_change: bool = False,
+        embedding: list[float] | None = None,
     ) -> MemoryItemModel | None:
         model = await self.get_by_id(owner_id, memory_id, include_deleted=False)
         if model is None:
@@ -311,6 +314,8 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
             if hasattr(model, key):
                 setattr(model, key, val)
 
+        if embedding is not None:
+            model.embedding = embedding
         model.updated_at = utc_now()
         return model
 
@@ -337,6 +342,33 @@ class InMemoryMemoryRepository(MemoryRepositoryInterface):
             return False
         del self._storage[memory_id]
         return True
+
+    async def search_semantic(
+        self,
+        owner_id: str,
+        query_vector: list[float],
+        top_k: int = 5,
+        filter_params: MemoryFilter | None = None,
+    ) -> list[tuple[MemoryItemModel, float]]:
+        clean_owner = owner_id.strip() if owner_id else ""
+        if not clean_owner or not query_vector:
+            return []
+
+        candidates = await self.list(clean_owner, filter_params=filter_params)
+        scored: list[tuple[MemoryItemModel, float]] = []
+        for model in candidates:
+            if model.embedding is not None and isinstance(model.embedding, (list, tuple)):
+                if len(model.embedding) == len(query_vector):
+                    sim = sum(a * b for a, b in zip(query_vector, model.embedding, strict=True))
+                    scored.append((model, round(sim, 4)))
+
+        def sort_key(entry: tuple[MemoryItemModel, float]):
+            m, s = entry
+            t = (m.created_at or datetime.min.replace(tzinfo=UTC)).timestamp()
+            return (-s, -t, str(m.id))
+
+        scored.sort(key=sort_key)
+        return scored[:top_k]
 
 
 class QuestionEvaluationResult(BaseModel):

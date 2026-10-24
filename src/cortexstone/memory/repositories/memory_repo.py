@@ -4,13 +4,15 @@ Enforces mandatory owner scoping, parameterized SQL/ORM expressions,
 deterministic ordering, soft deletion, and verifiable hard deletion.
 """
 
+from __future__ import annotations
+
 from uuid import UUID
 
 from sqlalchemy import delete, desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from cortexstone.db.base import utc_now
-from cortexstone.db.models.memory import MemoryItemModel
+from cortexstone.db.models.memory import PGVECTOR_AVAILABLE, MemoryItemModel
 from cortexstone.memory.repositories.base import MemoryRepositoryInterface
 from cortexstone.memory.schemas import (
     MemoryFilter,
@@ -41,6 +43,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         self,
         owner_id: str,
         item: MemoryItemCreate,
+        embedding: list[float] | None = None,
     ) -> MemoryItemModel:
         """Create and persist a new memory record for the specified owner.
 
@@ -66,6 +69,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
             kind=item.kind.value,
             title=item.title,
             content=item.content,
+            embedding=embedding,
             source_type=item.source_type,
             source_ref=item.source_ref,
             occurred_at=item.occurred_at,
@@ -167,6 +171,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         memory_id: UUID,
         update_data: MemoryItemUpdate,
         allow_approval_change: bool = False,
+        embedding: list[float] | None = None,
     ) -> MemoryItemModel | None:
         """Update an existing active memory item owned by owner_id.
 
@@ -175,6 +180,7 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
         2. Soft-deleted records cannot be updated or silently reactivated.
         3. `approved` state cannot be toggled unless `allow_approval_change=True`.
         4. Updates `updated_at` to UTC now.
+        5. Updates `embedding` if provided.
         """
         if not owner_id or not memory_id:
             return None
@@ -219,9 +225,100 @@ class SqlAlchemyMemoryRepository(MemoryRepositoryInterface):
                 )
             target.approved = update_data.approved
 
+        if embedding is not None:
+            target.embedding = embedding
+
         target.updated_at = utc_now()
         await self._session.flush()
         return target
+
+    async def search_semantic(
+        self,
+        owner_id: str,
+        query_vector: list[float],
+        top_k: int = 5,
+        filter_params: MemoryFilter | None = None,
+    ) -> list[tuple[MemoryItemModel, float]]:
+        """Search memory items by vector cosine similarity for the specified owner.
+
+        Always filters strictly by owner_id and deleted_at IS NULL.
+        Uses native pgvector <=> operator under PostgreSQL, or in-memory cosine
+        similarity fallback under non-vector engines/testing.
+        """
+        clean_owner = owner_id.strip() if owner_id else ""
+        if not clean_owner:
+            return []
+        if not query_vector:
+            raise ValueError("query_vector must not be empty.")
+
+        if filter_params is None:
+            filter_params = MemoryFilter()
+
+        base_conditions = [
+            MemoryItemModel.owner_id == clean_owner,
+            MemoryItemModel.deleted_at.is_(None),
+            MemoryItemModel.embedding.isnot(None),
+        ]
+
+        if filter_params.kind is not None:
+            base_conditions.append(MemoryItemModel.kind == filter_params.kind.value)
+        if filter_params.source_type is not None:
+            base_conditions.append(MemoryItemModel.source_type == filter_params.source_type)
+        if filter_params.sensitivity is not None:
+            base_conditions.append(MemoryItemModel.sensitivity == filter_params.sensitivity.value)
+        if filter_params.approved_only is not None:
+            base_conditions.append(MemoryItemModel.approved.is_(filter_params.approved_only))
+        if filter_params.occurred_after is not None:
+            base_conditions.append(MemoryItemModel.occurred_at >= filter_params.occurred_after)
+        if filter_params.occurred_before is not None:
+            base_conditions.append(MemoryItemModel.occurred_at <= filter_params.occurred_before)
+
+        # Native pgvector query execution when Vector supports cosine_distance
+        if PGVECTOR_AVAILABLE and hasattr(MemoryItemModel.embedding, "cosine_distance"):
+            dist_col = MemoryItemModel.embedding.cosine_distance(query_vector).label("dist")
+            stmt = (
+                select(MemoryItemModel, dist_col)
+                .where(*base_conditions)
+                .order_by(
+                    dist_col.asc(),
+                    desc(MemoryItemModel.created_at),
+                    desc(MemoryItemModel.id),
+                )
+                .limit(top_k)
+            )
+            try:
+                res = await self._session.execute(stmt)
+                rows = res.all()
+                return [(row[0], round(1.0 - float(row[1]), 4)) for row in rows]
+            except Exception:
+                # If native vector operator execution fails (e.g. SQLite engine in unit tests),
+                # fallback to in-memory cosine ranking below
+                pass
+
+        # Fallback for SQLite / test environments without native vector functions
+        stmt = (
+            select(MemoryItemModel)
+            .where(*base_conditions)
+            .order_by(desc(MemoryItemModel.created_at), desc(MemoryItemModel.id))
+        )
+        res = await self._session.execute(stmt)
+        candidates = list(res.scalars().all())
+
+        scored: list[tuple[MemoryItemModel, float]] = []
+        for model in candidates:
+            vec = model.embedding
+            if isinstance(vec, (list, tuple)) and len(vec) == len(query_vector):
+                # Cosine similarity for normalized vectors = dot product
+                sim = sum(a * b for a, b in zip(query_vector, vec, strict=True))
+                scored.append((model, round(sim, 4)))
+
+        def sort_key(entry: tuple[MemoryItemModel, float]):
+            model, sim = entry
+            created_epoch = model.created_at.timestamp() if model.created_at else 0.0
+            return (-sim, -created_epoch, str(model.id))
+
+        scored.sort(key=sort_key)
+        return scored[:top_k]
 
     async def soft_delete(
         self,

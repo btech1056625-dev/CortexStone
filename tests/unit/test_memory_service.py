@@ -13,7 +13,12 @@ from cortexstone.application.memory.service import (
     MemoryService,
 )
 from cortexstone.db.models.memory import MemoryItemModel
+from cortexstone.memory.embeddings.base import EmbeddingProvider
 from cortexstone.memory.repositories.base import MemoryRepositoryInterface
+from cortexstone.memory.retrieval.retriever import (
+    MemoryRetrieverInterface,
+    RetrievalResult,
+)
 from cortexstone.memory.schemas import (
     MemoryFilter,
     MemoryItemCreate,
@@ -332,3 +337,134 @@ async def test_export_memories_owner_scoped_and_bounded():
     assert call_args["owner_id"] == "user_alpha"
     assert call_args["filter_params"].include_deleted is False
     assert call_args["filter_params"].limit == 50
+
+
+# -----------------------------------------------------------------------------
+# 4. Embedding Generation and Semantic Search Service Tests
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_create_memory_with_embedding_provider_auto_embeds():
+    """Verify create_memory automatically embeds document content when provider is present."""
+    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
+    fake_model = create_fake_model(owner_id="user_embed")
+    mock_repo.create.return_value = fake_model
+
+    mock_provider = AsyncMock(spec=EmbeddingProvider)
+    mock_provider.embed_document.return_value = [0.1] * 384
+
+    service = MemoryService(repository=mock_repo, embedding_provider=mock_provider)
+    item = MemoryItemCreate(kind=MemoryKind.FACT, content="Python memory subsystem")
+
+    res = await service.create_memory(owner_id="user_embed", item=item)
+    assert res.owner_id == "user_embed"
+    mock_provider.embed_document.assert_awaited_once_with("Python memory subsystem")
+    mock_repo.create.assert_called_once_with(
+        owner_id="user_embed",
+        item=item,
+        embedding=[0.1] * 384,
+    )
+
+
+@pytest.mark.anyio
+async def test_update_memory_refreshes_embedding_on_content_change():
+    """Verify update_memory re-computes embedding when content is modified."""
+    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
+    fake_model = create_fake_model(owner_id="user_embed", content="Updated text")
+    mock_repo.update.return_value = fake_model
+
+    mock_provider = AsyncMock(spec=EmbeddingProvider)
+    mock_provider.embed_document.return_value = [0.2] * 384
+
+    service = MemoryService(repository=mock_repo, embedding_provider=mock_provider)
+    update_in = MemoryItemUpdate(content="Updated text")
+    mem_id = uuid4()
+
+    res = await service.update_memory(
+        owner_id="user_embed", memory_id=mem_id, update_data=update_in
+    )
+    assert res is not None
+    mock_provider.embed_document.assert_awaited_once_with("Updated text")
+    mock_repo.update.assert_called_once_with(
+        owner_id="user_embed",
+        memory_id=mem_id,
+        update_data=update_in,
+        allow_approval_change=False,
+        embedding=[0.2] * 384,
+    )
+
+
+@pytest.mark.anyio
+async def test_update_memory_does_not_embed_when_content_not_changed():
+    """Verify update_memory skips embedding calculation when content is not updated."""
+    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
+    fake_model = create_fake_model(owner_id="user_embed")
+    mock_repo.update.return_value = fake_model
+
+    mock_provider = AsyncMock(spec=EmbeddingProvider)
+    service = MemoryService(repository=mock_repo, embedding_provider=mock_provider)
+    update_in = MemoryItemUpdate(title="New Title")
+    mem_id = uuid4()
+
+    res = await service.update_memory(
+        owner_id="user_embed", memory_id=mem_id, update_data=update_in
+    )
+    assert res is not None
+    mock_provider.embed_document.assert_not_called()
+    mock_repo.update.assert_called_once_with(
+        owner_id="user_embed",
+        memory_id=mem_id,
+        update_data=update_in,
+        allow_approval_change=False,
+    )
+
+
+@pytest.mark.anyio
+async def test_create_memory_fails_closed_on_embedding_error():
+    """Verify repository creation is not called if embedding provider fails."""
+    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
+    mock_provider = AsyncMock(spec=EmbeddingProvider)
+    mock_provider.embed_document.side_effect = RuntimeError("Embedding provider failed")
+
+    service = MemoryService(repository=mock_repo, embedding_provider=mock_provider)
+    item = MemoryItemCreate(kind=MemoryKind.FACT, content="Some content")
+
+    with pytest.raises(RuntimeError, match="Embedding provider failed"):
+        await service.create_memory(owner_id="user_embed", item=item)
+
+    assert not mock_repo.create.called
+
+
+@pytest.mark.anyio
+async def test_search_memories_delegates_to_retrieval_service_and_audits():
+    """Verify search_memories delegates query and logs content-free audit event."""
+    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
+    mock_retrieval = AsyncMock(spec=MemoryRetrieverInterface)
+    mock_retrieval.retrieve.return_value = RetrievalResult(
+        owner_id="user_search",
+        query="vector indexing",
+        total_eligible=1,
+        returned_count=1,
+        items=[],
+    )
+    audit_logger = InMemoryAuditLogger()
+    service = MemoryService(
+        repository=mock_repo,
+        audit_logger=audit_logger,
+        retrieval_service=mock_retrieval,
+    )
+
+    result = await service.search_memories(
+        owner_id="user_search",
+        query="vector indexing",
+        top_k=3,
+    )
+    assert result.owner_id == "user_search"
+    assert result.query == "vector indexing"
+    assert mock_retrieval.retrieve.called
+
+    # Audit event check
+    search_events = [e for e in audit_logger.events if e.event_type == "memory.search"]
+    assert len(search_events) == 1
+    assert search_events[0].owner_id == "user_search"

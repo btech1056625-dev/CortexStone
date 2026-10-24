@@ -29,14 +29,22 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from cortexstone.db.base import Base, TimestampMixin
+from cortexstone.memory.embeddings.config import BGE_SMALL_DIMENSION
 
 # Try to import Vector from pgvector.sqlalchemy if installed in the environment.
-# If pgvector is not installed, we fallback to a NullType / Text placeholder
-# so the ORM model can be loaded, inspected, and tested without failing imports.
+# If pgvector is not installed, we fallback to a Text placeholder so the ORM model
+# can still be inspected, loaded, and tested without failing imports.
 try:
     from pgvector.sqlalchemy import Vector  # type: ignore
+    from sqlalchemy.ext.compiler import compiles
 
     PGVECTOR_AVAILABLE = True
+
+    @compiles(Vector, "sqlite")
+    def _compile_vector_sqlite(type_, compiler, **kw):  # noqa: ARG001
+        """Compile pgvector Vector type as TEXT when running on SQLite dialect."""
+        return "TEXT"
+
 except ImportError:
     Vector = None  # type: ignore
     PGVECTOR_AVAILABLE = False
@@ -74,6 +82,15 @@ class MemoryItemModel(Base, TimestampMixin):
             "occurred_at",
             postgresql_where="deleted_at IS NULL",
         ),
+        # HNSW vector index using cosine distance (vector_cosine_ops) for BGE embeddings
+        Index(
+            "ix_memory_items_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_where="deleted_at IS NULL AND embedding IS NOT NULL",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -101,12 +118,10 @@ class MemoryItemModel(Base, TimestampMixin):
     )
 
     # Embedding column representation:
-    # When pgvector is installed and a dimension is configured, Vector(D) is used.
-    # To prevent freezing an unconfirmed dimension prematurely, the column is typed
-    # generically as Text/JSON or dynamic Vector when instantiated with dimension.
-    # It remains NULLABLE by default.
+    # Uses pgvector Vector(384) matching BAAI/bge-small-en-v1.5 when pgvector is installed,
+    # with clean Text fallback for environments where pgvector is absent.
     embedding: Mapped[Any | None] = mapped_column(
-        Text,  # Will map to Vector(D) once team finalizes dimension integer
+        Vector(BGE_SMALL_DIMENSION) if PGVECTOR_AVAILABLE else Text,
         nullable=True,
     )
 

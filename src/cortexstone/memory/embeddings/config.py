@@ -9,7 +9,15 @@ import math
 from pydantic import BaseModel, ConfigDict, Field
 
 # -----------------------------------------------------------------------------
-# 1. Domain Exceptions for Embedding Operations
+# 1. Centralized Model & Provider Constants
+# -----------------------------------------------------------------------------
+
+BGE_SMALL_MODEL_ID: str = "BAAI/bge-small-en-v1.5"
+BGE_SMALL_DIMENSION: int = 384
+BGE_SMALL_QUERY_INSTRUCTION: str = "Represent this sentence for searching relevant passages: "
+
+# -----------------------------------------------------------------------------
+# 2. Domain Exceptions for Embedding Operations
 # -----------------------------------------------------------------------------
 
 
@@ -53,28 +61,26 @@ class EmbeddingProviderError(EmbeddingError, RuntimeError):
 class EmbeddingConfig(BaseModel):
     """Typed configuration for an embedding provider.
 
-    Does not hardcode an unapproved model or dimension. Values must be provided
-    via environment/application configuration.
+    Centralized defaults align with the team-selected BAAI/bge-small-en-v1.5
+    model (384 dimensions) while allowing overrides.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     provider_id: str = Field(
-        ...,
+        default="fastembed",
         min_length=1,
-        description="Identifier of the provider (e.g., 'nebius', 'fastembed', 'fake').",
+        description="Provider identifier (e.g., 'fastembed', 'sentence_transformers', 'fake').",
     )
     model_id: str = Field(
-        ...,
+        default=BGE_SMALL_MODEL_ID,
         min_length=1,
-        description=(
-            "Exact model identifier (e.g., 'Qwen/Qwen3-Embedding-8B', 'BAAI/bge-small-en-v1.5')."
-        ),
+        description="Exact model identifier (e.g., 'BAAI/bge-small-en-v1.5').",
     )
     dimension: int = Field(
-        ...,
+        default=BGE_SMALL_DIMENSION,
         gt=0,
-        description="Expected embedding vector dimension (e.g., 384, 768, 1024, 1536).",
+        description="Expected embedding vector dimension (e.g., 384).",
     )
     request_timeout_seconds: float = Field(
         default=30.0,
@@ -86,6 +92,10 @@ class EmbeddingConfig(BaseModel):
         gt=0,
         le=512,
         description="Maximum batch size for vector generation.",
+    )
+    query_instruction: str = Field(
+        default=BGE_SMALL_QUERY_INSTRUCTION,
+        description="Instruction prefix prepended to search queries during retrieval.",
     )
 
 

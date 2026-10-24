@@ -19,12 +19,21 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from cortexstone.db.base import utc_now
+from cortexstone.memory.embeddings.base import EmbeddingProvider
 from cortexstone.memory.repositories.base import MemoryRepositoryInterface
+from cortexstone.memory.retrieval.retriever import (
+    MemoryRetrievalService,
+    MemoryRetrieverInterface,
+    RetrievalRequest,
+    RetrievalResult,
+)
 from cortexstone.memory.schemas import (
     MemoryFilter,
     MemoryItemCreate,
     MemoryItemRead,
     MemoryItemUpdate,
+    MemoryKind,
+    SensitivityLevel,
 )
 from cortexstone.security.audit.service import AuditEvent, AuditLoggerInterface
 
@@ -65,15 +74,24 @@ class MemoryService:
         self,
         repository: MemoryRepositoryInterface,
         audit_logger: AuditLoggerInterface | None = None,
+        embedding_provider: EmbeddingProvider | None = None,
+        retrieval_service: MemoryRetrieverInterface | None = None,
     ) -> None:
-        """Initialize MemoryService with injected repository and optional audit logger.
+        """Initialize MemoryService with injected repository, optional audit logger and embedder.
 
         Args:
             repository: Conforming MemoryRepositoryInterface implementation.
             audit_logger: Optional AuditLoggerInterface implementation for lifecycle events.
+            embedding_provider: Optional EmbeddingProvider for semantic embeddings.
+            retrieval_service: Optional MemoryRetrieverInterface implementation.
         """
         self._repository = repository
         self._audit_logger = audit_logger
+        self._embedding_provider = embedding_provider
+        self._retrieval_service = retrieval_service or MemoryRetrievalService(
+            repository=repository,
+            embedding_provider=embedding_provider,
+        )
 
     async def create_memory(
         self,
@@ -92,7 +110,21 @@ class MemoryService:
         if not owner_id or not owner_id.strip():
             raise ValueError("owner_id must be a non-empty string.")
 
-        model = await self._repository.create(owner_id=owner_id.strip(), item=item)
+        embedding: list[float] | None = None
+        if self._embedding_provider is not None:
+            embedding = await self._embedding_provider.embed_document(item.content)
+
+        if embedding is not None:
+            model = await self._repository.create(
+                owner_id=owner_id.strip(),
+                item=item,
+                embedding=embedding,
+            )
+        else:
+            model = await self._repository.create(
+                owner_id=owner_id.strip(),
+                item=item,
+            )
         read_item = MemoryItemRead.model_validate(model)
 
         if self._audit_logger:
@@ -181,12 +213,25 @@ class MemoryService:
         if not owner_id or not owner_id.strip() or not memory_id:
             return None
 
-        updated_model = await self._repository.update(
-            owner_id=owner_id.strip(),
-            memory_id=memory_id,
-            update_data=update_data,
-            allow_approval_change=allow_approval_change,
-        )
+        embedding: list[float] | None = None
+        if self._embedding_provider is not None and update_data.content is not None:
+            embedding = await self._embedding_provider.embed_document(update_data.content)
+
+        if embedding is not None:
+            updated_model = await self._repository.update(
+                owner_id=owner_id.strip(),
+                memory_id=memory_id,
+                update_data=update_data,
+                allow_approval_change=allow_approval_change,
+                embedding=embedding,
+            )
+        else:
+            updated_model = await self._repository.update(
+                owner_id=owner_id.strip(),
+                memory_id=memory_id,
+                update_data=update_data,
+                allow_approval_change=allow_approval_change,
+            )
         if updated_model is None:
             return None
 
@@ -370,3 +415,70 @@ class MemoryService:
             total_count=len(items),
             items=items,
         )
+
+    async def search_memories(
+        self,
+        owner_id: str,
+        query: str | RetrievalRequest,
+        top_k: int = 5,
+        kind: MemoryKind | None = None,
+        sensitivity: SensitivityLevel | None = None,
+        approved_only: bool | None = None,
+        occurred_after: datetime | None = None,
+        occurred_before: datetime | None = None,
+        reference_time: datetime | None = None,
+    ) -> RetrievalResult:
+        """Search active memories belonging to the authenticated owner.
+
+        Args:
+            owner_id: Authenticated owner ID.
+            query: Query text string or a pre-built RetrievalRequest.
+            top_k: Maximum ranked results to return.
+            kind: Optional filter by memory kind.
+            sensitivity: Optional filter by sensitivity level.
+            approved_only: Optional filter for approved items only.
+            occurred_after: Optional cutoff for earliest event timestamp.
+            occurred_before: Optional cutoff for latest event timestamp.
+            reference_time: Optional evaluation timestamp for recency decay.
+
+        Returns:
+            RetrievalResult containing ranked MemorySearchResult items.
+        """
+        if not owner_id or not owner_id.strip():
+            raise ValueError("owner_id must be a non-empty string.")
+
+        clean_owner = owner_id.strip()
+
+        if isinstance(query, RetrievalRequest):
+            request = query
+        else:
+            request = RetrievalRequest(
+                query=query,
+                top_k=top_k,
+                kind=kind,
+                sensitivity=sensitivity,
+                approved_only=approved_only,
+                occurred_after=occurred_after,
+                occurred_before=occurred_before,
+            )
+
+        result = await self._retrieval_service.retrieve(
+            owner_id=clean_owner,
+            request=request,
+            reference_time=reference_time,
+        )
+
+        if self._audit_logger:
+            await self._audit_logger.log_event(
+                AuditEvent(
+                    event_type="memory.search",
+                    owner_id=clean_owner,
+                    resource_id=None,
+                    details={
+                        "returned_count": result.returned_count,
+                        "total_eligible": result.total_eligible,
+                    },
+                )
+            )
+
+        return result
