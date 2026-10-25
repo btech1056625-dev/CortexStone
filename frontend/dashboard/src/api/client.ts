@@ -18,11 +18,14 @@ function kindFor(status: number): Failure['kind'] {
 }
 
 /** One place for HTTP. Only the server's envelope message is surfaced; raw bodies and stack traces never are. */
-async function call<T>(base: string, path: string, init?: RequestInit): Promise<Result<T>> {
+async function call<T>(base: string, path: string, init?: RequestInit, accessToken?: string): Promise<Result<T>> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(base + path, { ...init, signal: ctl.signal, headers: { 'Content-Type': 'application/json', ...init?.headers } });
+    const res = await fetch(base + path, { ...init, signal: ctl.signal, headers: {
+      'Content-Type': 'application/json', ...init?.headers,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    } });
     const body: unknown = await res.json().catch(() => null);
     if (res.ok) return { ok: true, data: body as T };
     const env = body as {
@@ -46,9 +49,8 @@ const notRegistered = (what: string): Failure => ({
 });
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const hash = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
-const repoPath = (repo: string) => repo.split('/').map(encodeURIComponent).join('/');
 
-export function createApi(mode: DataMode, base: string, scenario: DemoScenario = 'normal'): Api {
+export function createApi(mode: DataMode, base: string, scenario: DemoScenario = 'normal', accessToken?: string): Api {
   const checks: PolicyCheck[] = [];
   const recordCheck = (action: ProposedAction, result: ActionValidation) => {
     checks.unshift({ action, result, at: new Date().toISOString() });
@@ -58,6 +60,12 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
   const recentPolicyChecks = () => checks.map((check) => ({ ...check, action: { ...check.action, arguments: { ...check.action.arguments } }, result: { ...check.result } }));
 
   if (mode === 'live') {
+    const request = <T,>(path: string, init?: RequestInit) => call<T>(base, path, init, accessToken);
+    type ApiMemory = { id: string; content: string; memory_type: MemoryRecord['kind']; source?: string | null; confidence?: number | null; created_at: string };
+    const normalizeMemory = (item: ApiMemory): MemoryRecord => ({
+      id: item.id, content: item.content, kind: item.memory_type, source: item.source ?? 'unknown',
+      inferred: item.source !== 'user', confidence: item.confidence ?? 0, createdAt: item.created_at,
+    });
     const probe = async (path: string): Promise<Probe> => {
       const t = performance.now();
       const r = await call<unknown>(base, path);
@@ -67,18 +75,18 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
       return { state: 'degraded', ms, detail: r.status === 503 ? 'Not ready: a required dependency is unavailable.' : r.message };
     };
     const validateAction = async (action: ProposedAction) => {
-      const r = await call<ActionValidation>(base, API_PATHS.validateAction, { method: 'POST', body: JSON.stringify({ action }) });
+      const r = await request<ActionValidation>(API_PATHS.validateAction, { method: 'POST', body: JSON.stringify({ action }) });
       return r.ok ? recordCheck(action, r.data) : r;
     };
     return {
       mode,
-      support: { health: 'live', actions: 'live', chat: 'unavailable', memory: 'live', jobs: 'unavailable', guardian: 'unavailable', integrations: 'live' },
+      support: { health: 'live', actions: 'live', chat: 'live', memory: 'live', jobs: 'unavailable', guardian: 'unavailable', integrations: 'unavailable' },
       async health() {
         const [health, ready, me] = await Promise.all([
           probe(API_PATHS.health), probe(API_PATHS.ready),
           (async () => {
             const t = performance.now();
-            const result = await call<Principal>(base, API_PATHS.principal);
+            const result = await request<Principal>(API_PATHS.principal);
             return { result, ms: Math.round(performance.now() - t) };
           })(),
         ]);
@@ -95,21 +103,31 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
       },
       validateAction,
       recentPolicyChecks,
-      sendChat: async () => notRegistered('POST /api/v1/chat'),
-      listMemories: () => call<MemoryRecord[]>(base, API_PATHS.memories),
-      createMemory: (memory: CreateMemory) => call<MemoryRecord>(base, API_PATHS.memories, { method: 'POST', body: JSON.stringify(memory) }),
-      forgetMemory: (id) => call<void>(base, `${API_PATHS.memories}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      sendChat: (message, conversationId) => request<ChatResponse>(API_PATHS.chat, {
+        method: 'POST', body: JSON.stringify({ message, conversation_id: conversationId }),
+      }),
+      async listMemories() {
+        const result = await request<{ items: ApiMemory[] }>(`${API_PATHS.memories}?limit=100&offset=0`);
+        return result.ok ? { ok: true, data: result.data.items.map(normalizeMemory) } : result;
+      },
+      async createMemory(memory: CreateMemory) {
+        const result = await request<ApiMemory>(API_PATHS.memories, {
+          method: 'POST', body: JSON.stringify({ content: memory.content, memory_type: memory.kind }),
+        });
+        return result.ok ? { ok: true, data: normalizeMemory(result.data) } : result;
+      },
+      forgetMemory: (id) => request<void>(`${API_PATHS.memories}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
       listJobs: async () => notRegistered('A jobs endpoint'),
       listFindings: async () => notRegistered('A findings endpoint'),
-      listGithubRepos: () => call<GitHubRepository[]>(base, API_PATHS.githubRepos),
-      listGithubIssues: (repo) => call<GitHubIssue[]>(base, `${API_PATHS.githubRepos}/${repoPath(repo)}/issues`),
-      listGithubPulls: (repo) => call<GitHubPullRequest[]>(base, `${API_PATHS.githubRepos}/${repoPath(repo)}/pulls`),
-      listGithubRuns: (repo) => call<GitHubWorkflowRun[]>(base, `${API_PATHS.githubRepos}/${repoPath(repo)}/runs`),
-      listCalendarEvents: (start, end, timezone) => call<CalendarEvent[]>(base, `${API_PATHS.calendarEvents}?${new URLSearchParams({ start, end, timezone })}`),
-      listNotes: () => call<Note[]>(base, API_PATHS.notes),
-      createNote: (title, content) => call<Note>(base, API_PATHS.notes, { method: 'POST', body: JSON.stringify({ title, content }) }),
-      updateNote: (id, title, content) => call<Note>(base, `${API_PATHS.notes}/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ title, content }) }),
-      deleteNote: (id) => call<void>(base, `${API_PATHS.notes}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+      listGithubRepos: async () => notRegistered('GitHub connector routes'),
+      listGithubIssues: async () => notRegistered('GitHub connector routes'),
+      listGithubPulls: async () => notRegistered('GitHub connector routes'),
+      listGithubRuns: async () => notRegistered('GitHub connector routes'),
+      listCalendarEvents: async () => notRegistered('Calendar connector routes'),
+      listNotes: async () => notRegistered('Notes routes'),
+      createNote: async () => notRegistered('Notes routes'),
+      updateNote: async () => notRegistered('Notes routes'),
+      deleteNote: async () => notRegistered('Notes routes'),
     };
   }
 

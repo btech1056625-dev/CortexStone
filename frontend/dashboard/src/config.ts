@@ -7,6 +7,7 @@ export const API_PATHS = {
   health: '/health',
   ready: '/ready',
   principal: '/api/v1/me',
+  chat: '/api/v1/chat',
   validateAction: '/api/v1/actions/validate',
   memories: '/api/v1/memories',
   githubRepos: '/api/v1/connectors/github/repos',
@@ -19,7 +20,7 @@ const invalid = (error: string): Config => ({ mode: 'mock', apiBase: '', error }
 
 /** VITE_* values are public. Validate them; never treat them as secrets. */
 export function parseConfig(env: RawEnv): Config {
-  const mode = (env.VITE_DATA_MODE ?? 'mock').trim();
+  const mode = (env.VITE_DATA_MODE ?? 'live').trim();
   if (mode !== 'mock' && mode !== 'live') return invalid(`VITE_DATA_MODE must be "mock" or "live" (got "${mode}").`);
   const base = (env.VITE_API_BASE_URL ?? '').trim();
   if (!base) return { mode, apiBase: '', error: null };

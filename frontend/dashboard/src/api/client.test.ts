@@ -5,11 +5,16 @@ afterEach(() => vi.unstubAllGlobals());
 const sample = { action_id: 'x', tool_name: 'notes.delete', target_ref: 'r', arguments: {}, purpose: '', requested_at: '' };
 
 describe('live mode', () => {
-  it('never calls the unregistered chat route', async () => {
-    const f = vi.fn(); vi.stubGlobal('fetch', f);
-    const r = await createApi('live', '').sendChat('hi', null);
-    expect(f).not.toHaveBeenCalled();
-    expect(r.ok).toBe(false);
+  it('sends chat to the registered backend route with the OIDC bearer token', async () => {
+    const f = vi.fn(async () => new Response(JSON.stringify({ conversation_id: 'c1', answer: 'Hello', proposed_actions: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', f);
+    const token = 'signed-access-token';
+    const r = await createApi('live', '', 'normal', token).sendChat('hi', null);
+    expect(r.ok).toBe(true);
+    expect(f).toHaveBeenCalledWith('/api/v1/chat', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ message: 'hi', conversation_id: null }),
+      headers: expect.objectContaining({ Authorization: `Bearer ${token}` }),
+    }));
   });
   it('maps the real 503 envelope without leaking the body', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { code: 'service_unavailable', message: 'Not configured.' }, request_id: 'r1', trace: 'SECRET' }), { status: 503 })));
@@ -46,49 +51,39 @@ describe('live mode', () => {
     expect(fetchMock.mock.calls.map(([input]) => String(input)).sort()).toEqual(['/api/v1/me', '/health', '/ready']);
     expect(result.ok && result.data.principal).toEqual({ id: 'user-1', display_name: 'Operator', authenticated: true });
   });
-  it('uses the calendar contract query and notes CRUD paths', async () => {
+  it('does not call connector and notes routes that the backend has not registered', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([]), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const live = createApi('live', '');
-    await live.listCalendarEvents('2026-10-25T00:00:00+05:30', '2026-11-01T00:00:00+05:30', 'Asia/Kolkata');
-    await live.listNotes();
-    await live.createNote('Title', 'Body');
-    await live.updateNote('note 1', 'Updated', 'Body 2');
-    await live.deleteNote('note 1');
-    expect(fetchMock.mock.calls.map(([input, init]) => [String(input), init?.method ?? 'GET'])).toEqual([
-      ['/api/v1/connectors/calendar/events?start=2026-10-25T00%3A00%3A00%2B05%3A30&end=2026-11-01T00%3A00%3A00%2B05%3A30&timezone=Asia%2FKolkata', 'GET'],
-      ['/api/v1/notes', 'GET'],
-      ['/api/v1/notes', 'POST'],
-      ['/api/v1/notes/note%201', 'PATCH'],
-      ['/api/v1/notes/note%201', 'DELETE'],
+    const results = await Promise.all([
+      live.listCalendarEvents('2026-10-25T00:00:00+05:30', '2026-11-01T00:00:00+05:30', 'Asia/Kolkata'),
+      live.listNotes(), live.createNote('Title', 'Body'), live.updateNote('note 1', 'Updated', 'Body 2'), live.deleteNote('note 1'),
     ]);
+    expect(results.every((result) => !result.ok && result.kind === 'unavailable')).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
-  it('uses the repository issues, pulls, and runs read routes', async () => {
+  it('does not call GitHub connector routes that the backend has not registered', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([]), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const live = createApi('live', '');
-    await live.listGithubRepos();
-    await live.listGithubIssues('octo-org/sample-repo');
-    await live.listGithubPulls('octo-org/sample-repo');
-    await live.listGithubRuns('octo-org/sample-repo');
-    expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
-      '/api/v1/connectors/github/repos',
-      '/api/v1/connectors/github/repos/octo-org/sample-repo/issues',
-      '/api/v1/connectors/github/repos/octo-org/sample-repo/pulls',
-      '/api/v1/connectors/github/repos/octo-org/sample-repo/runs',
+    const results = await Promise.all([
+      live.listGithubRepos(), live.listGithubIssues('octo-org/sample-repo'),
+      live.listGithubPulls('octo-org/sample-repo'), live.listGithubRuns('octo-org/sample-repo'),
     ]);
+    expect(results.every((result) => !result.ok && result.kind === 'unavailable')).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
   it('creates memories through the contract endpoint without a browser user id', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
-      id: 'memory-1', content: 'Prefers concise summaries', kind: 'preference', source: 'user',
-      inferred: false, confidence: 1, createdAt: '2026-10-30T00:00:00Z',
+      id: 'memory-1', content: 'Prefers concise summaries', memory_type: 'preference', source: 'user',
+      confidence: 1, created_at: '2026-10-30T00:00:00Z',
     }), { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);
     const result = await createApi('live', '').createMemory({ content: 'Prefers concise summaries', kind: 'preference' });
     expect(result.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/memories', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ content: 'Prefers concise summaries', kind: 'preference' }),
+      body: JSON.stringify({ content: 'Prefers concise summaries', memory_type: 'preference' }),
     }));
   });
 });

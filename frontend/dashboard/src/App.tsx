@@ -40,6 +40,7 @@ const useRoute = () => {
 const UNAVAILABLE: Record<string, { feature: Feature; title: string; paths: string[] }> = {
   jobs: { feature: 'jobs', title: 'Jobs & Workflows', paths: ['GET /api/v1/jobs', 'GET /api/v1/jobs/{id}'] },
   guardian: { feature: 'guardian', title: 'Guardian', paths: ['GET /api/v1/findings'] },
+  integrations: { feature: 'integrations', title: 'Integrations', paths: ['GitHub connector routes', 'Calendar connector routes', 'Notes routes'] },
 };
 
 function UnavailablePage({ title, paths }: { title: string; paths: string[] }) {
@@ -47,23 +48,31 @@ function UnavailablePage({ title, paths }: { title: string; paths: string[] }) {
 }
 
 function SettingsPage() {
-  const { snap, mode, scenario, setMode } = useHealth();
+  const { snap, mode, scenario, setMode, accessToken, setAccessToken } = useHealth();
+  const [tokenDraft, setTokenDraft] = useState(accessToken);
   const rows: [string, React.ReactNode][] = [
     ['Data mode', mode === 'live' ? 'Live backend' : 'Simulated sandbox'],
     ['API base URL', API_BASE ? <code>{API_BASE}</code> : <span>Same origin (Vite proxy)</span>],
     ['Connection', mode === 'mock' ? 'Sandbox' : overall(snap)],
     ['Signed in as', snap?.principal?.authenticated ? `${snap.principal.display_name} · ${snap.principal.id}` : 'No authenticated principal returned by /api/v1/me.'],
+    ['API token', mode === 'live' ? accessToken ? 'In memory for this tab' : 'Not provided' : 'Not used in sandbox mode.'],
     ['Scenario', mode === 'mock' ? scenario : 'Scenarios are available in sandbox mode only.'],
   ];
   return <div className="page"><div className="head"><div><h1>Settings</h1><p>Connection and account status for this dashboard.</p></div></div>
     <section className="panel"><div className="scroll"><table><tbody>{rows.map(([key, value]) => <tr key={key}><th scope="row" style={{ width: 200 }}>{key}</th><td>{value}</td></tr>)}</tbody></table></div></section>
     <Banner title="Identity is server-side">The API derives identity from verified credentials. This dashboard never sends a user id or stores provider credentials.</Banner>
+    {mode === 'live' && <section className="panel"><form className="body form" onSubmit={(event) => { event.preventDefault(); setAccessToken(tokenDraft.trim()); }}>
+      <div className="field full"><label htmlFor="api-token">OIDC access token</label><input id="api-token" type="password" autoComplete="off" value={tokenDraft} onChange={(event) => setTokenDraft(event.target.value)} placeholder="Paste a valid API bearer token" />
+        <small className="muted">Held only in this page's memory and sent as a bearer token to protected API routes. It is cleared when you reload or close this tab.</small></div>
+      <div><button className="btn primary" type="submit">Use token</button> <button className="btn" type="button" onClick={() => { setTokenDraft(''); setAccessToken(''); }} disabled={!accessToken && !tokenDraft}>Clear token</button></div>
+    </form></section>}
     <button className="btn" onClick={() => setMode(mode === 'mock' ? 'live' : 'mock')}>Switch to {mode === 'mock' ? 'Live API' : 'Simulated Sandbox'}</button>
   </div>;
 }
 
 function Page({ route }: { route: string }) {
-  if (route === 'integrations') return <Integrations />;
+  if (route === 'integrations') return api.support.integrations === 'unavailable'
+    ? <UnavailablePage title="Integrations" paths={['GitHub connector routes', 'Calendar connector routes', 'Notes routes']} /> : <Integrations />;
   const u = UNAVAILABLE[route];
   if (u) return api.support[u.feature] === 'unavailable' ? <UnavailablePage title={u.title} paths={u.paths} /> : route === 'jobs' ? <Jobs /> : <Guardian />;
   switch (route) {
