@@ -1,16 +1,16 @@
 # Cortexstone Project Review
 
 **Review updated:** 25 October 2026
-**Review baseline:** The 24 October 2026 review, updated to reflect the current working-tree implementation
+**Review baseline:** The 24 October 2026 review, updated for PR #22 and current `main`
 **Review scope:** Current repository implementation compared with `Documentations/Cortexstone_PRD.md`, `Documentations/Cortexstone_Architecture_HLD_LLD.md`, the agent and design rules, and the current integration specifications.
 
 ## Executive summary
 
-Cortexstone has moved beyond the original scaffold and now has an authenticated memory-and-chat vertical slice: OIDC identity, owner-scoped memory HTTP routes, an Alembic PostgreSQL/pgvector schema, BGE embedding and SQLAlchemy persistence wiring, and an authenticated chat endpoint that retrieves filtered memory context and returns a validated answer or typed proposals. The application chat flow lives under `application/chat` and invokes structured generation through the existing agent orchestrator. At the latest validation, the full test suite passed (302 tests), with Ruff, formatting, and `git diff --check` passing.
+Cortexstone has an authenticated memory-and-chat backend slice and an API-connected React/Vite dashboard, including the work merged in PR #22. The backend provides OIDC identity, owner-scoped memory routes, PostgreSQL/pgvector migrations and persistence wiring, BGE embeddings and retrieval, authenticated chat through the agent orchestrator/model adapter, and policy-only action validation. The dashboard defaults to live mode and calls the implemented health, identity, chat, action-validation, and memory routes. It accepts a bearer token in page memory; it does not implement sign-in or token issuance. Its explicit demo mode retains simulated responses, while unsupported live routes are reported unavailable.
 
-The implementation follows the **intended architecture direction** well: a modular monolith, replaceable model adapters, typed action proposals, fail-closed authorization, explicit owner-scoped memory operations, and separation between policy decisions and tool execution. The current stage is an **integrated backend vertical slice, not the completed MVP described in the PRD**. API-to-database and API-to-model flows have unit/contract coverage, but no live PostgreSQL or model-provider deployment was validated.
+The implementation follows the **intended architecture direction** well: a modular monolith, replaceable model adapters, typed action proposals, fail-closed authorization, explicit owner-scoped memory operations, and separation between policy decisions and tool execution. The current stage is an **integrated backend vertical slice with a connected dashboard, not the completed MVP described in the PRD**. No live PostgreSQL/OIDC/model deployment or deployment rehearsal has been documented.
 
-Important remaining work includes durable permission/approval state, registered production connector executors, verified action outcomes, durable jobs and scheduling, Telegram, Guardian scanning, a dashboard, and deployment. Authentication is implemented with configured OIDC and remains fail-closed when unavailable. The Nebius model adapter is wired to chat when its API key is configured; live credentials, quota, model availability, PostgreSQL, and deployment have not been verified.
+Important remaining work includes live acceptance of persistence and chat, dashboard checks in CI, durable permission/approval state, registered production connector executors, verified action outcomes, durable jobs and scheduling, Telegram, Guardian scanning, and deployment. Authentication is implemented with configured OIDC and remains fail-closed when unavailable. The dashboard currently requires a valid token to be pasted into Settings. The Nebius model adapter is wired to chat when its API key is configured; live credentials, quota, model availability, PostgreSQL, and deployment have not been verified.
 
 ## Implementation status at a glance
 
@@ -28,9 +28,10 @@ Important remaining work includes durable permission/approval state, registered 
 | Database and migrations | PostgreSQL/pgvector Compose service, async SQLAlchemy engine/session, Alembic `0001` migration with vector extension, table and indexes | Schema and wiring implemented; readiness checks connectivity, not migration status; live migration not verified |
 | Durable jobs and scheduler | Directory contracts and architecture plan | Not implemented |
 | Guardian | Directory contracts and architecture plan | Not implemented |
-| Telegram and dashboard | Directory contracts and design rules | Not implemented |
+| Dashboard | React/Vite workbench; live health, identity, chat, policy-validation, and memory integration; explicit demo mode | Implemented for currently registered APIs; no browser sign-in, and GitHub/Calendar/Notes/Jobs/Guardian remain unavailable because backend routes are absent |
+| Telegram | Directory contracts and design rules | Not implemented |
 | Nebius hosting | Deployment notes only | Not implemented or demonstrated |
-| Tests and CI | Unit, integration, and security tests; GitHub Actions CI for Python 3.12/3.13 | 302 local tests passed; Ruff, formatting, and diff checks passed; no live infrastructure/provider validation |
+| Tests and CI | Backend unit, integration, and security tests; GitHub Actions CI for Python 3.12/3.13 | CI validates Compose and runs Ruff, formatting, and pytest for Python; dashboard typecheck/tests/build are not in CI; no live infrastructure/provider validation |
 
 ## What has been implemented
 
@@ -46,7 +47,15 @@ Important remaining work includes durable permission/approval state, registered 
 - `/ready` checks connectivity to PostgreSQL. It does not verify migration state or model-provider availability.
 - `docs/DEVELOPMENT.md` describes local startup and API conventions.
 
-### 2. Model clients and structured agent proposals
+### 2. Dashboard integration
+
+- `frontend/dashboard/` contains the React 18/TypeScript/Vite application. Live API mode is the default; simulated responses require explicit demo mode.
+- The API client calls the implemented health, readiness, current-user, chat, action-validation, and owner-scoped memory routes. Memory page envelopes and field names are mapped to the dashboard's view model.
+- Protected requests can send an OIDC bearer token entered in Settings. The token stays in page memory for the current tab; OIDC sign-in/token issuance is not implemented.
+- Live failures are surfaced without falling back to fixtures. GitHub, Calendar, Notes, Jobs, and Guardian are reported unavailable because their backend routes are not registered.
+- This is an API-connected UI, not evidence of a live deployment: no browser-to-live-service acceptance run is recorded here.
+
+### 3. Model clients and structured agent proposals
 
 - `src/cortexstone/agent/models/interface.py` defines provider-neutral message, response, role, and error contracts.
 - `mock.py` supports offline development; `nebius.py` calls Nebius Token Factory and handles timeouts, authentication, rate limits, response parsing, and Pydantic validation.
@@ -55,7 +64,7 @@ Important remaining work includes durable permission/approval state, registered 
 - `AgentOrchestrator` provides bounded structured generation and typed action proposals. The chat application invokes this structured-generation entry point; it does not yet run a complete intent-router → policy → executor cycle.
 - Chat uses the configured Nebius client only when `NEBIUS_API_KEY` is set. The application does not silently substitute a mock model.
 
-### 3. Memory subsystem foundation
+### 4. Memory subsystem foundation
 
 - Memory schemas represent facts, episodes, and skills, including provenance, confidence, sensitivity, timestamps, and inferred status.
 - `MemoryItemCreate` now rejects unexpected fields and does not accept an `approved` field; newly created content cannot self-approve a skill through this schema.
@@ -69,7 +78,7 @@ Important remaining work includes durable permission/approval state, registered 
 
 The memory feature is wired end to end in code but has not yet been verified against a running PostgreSQL database or a live embedding model. Automated tests demonstrate the service/repository/API contracts, not production operational readiness or retrieval quality.
 
-### 4. Security policy and execution boundary
+### 5. Security policy and execution boundary
 
 - `src/cortexstone/security/policy/engine.py` derives risk from server-side tool definitions, checks exact allowlisted targets and permission grants, validates argument names and JSON compatibility, hashes canonical action data, and verifies matching, unexpired approval evidence.
 - The API's `/api/v1/actions/validate` endpoint returns a policy result without executing the action.
@@ -80,9 +89,9 @@ The memory feature is wired end to end in code but has not yet been verified aga
 
 The security flow remains incomplete for the PRD: token verification relies on an externally configured OIDC issuer; there is no durable permission store/revocation path, persistent approval service/UI, registered production tools, integrated action audit trail, or result-verification service. The notes search policy can be configured, but no Notes connector executor is registered.
 
-### 5. Tests and CI
+### 6. Tests and CI
 
-Tests cover health behavior, OIDC token validation and fail-closed routes, memory API ownership and contract behavior, the SQLAlchemy repository/service, BGE provider, memory retrieval/context formatting, chat context filtering and typed response handling, model parsing/routing, policy outcomes, and the tool runner. `.github/workflows/ci.yml` runs Ruff linting, Ruff formatting checks, and pytest across Python 3.12 and 3.13. The latest local run passed 302 tests; Ruff, formatting, and `git diff --check` also passed.
+Backend tests cover health behavior, OIDC token validation and fail-closed routes, memory API ownership and contract behavior, the SQLAlchemy repository/service, BGE provider, memory retrieval/context formatting, chat context filtering and typed response handling, model parsing/routing, policy outcomes, and the tool runner. `.github/workflows/ci.yml` validates Compose configuration and runs Ruff linting, Ruff formatting checks, and pytest across Python 3.12 and 3.13. The dashboard defines typecheck, test, and build scripts, but CI does not invoke them. No fresh dashboard check result or live-service acceptance result is recorded in this review.
 
 The test suite is not a substitute for runtime evidence with a real PostgreSQL schema, live OIDC provider, live model provider, or connector.
 
@@ -93,7 +102,7 @@ apps/                         API/worker/scheduler areas; worker and scheduler r
 deploy/                       Docker and Nebius notes; local Compose setup is at repository root
 docs/                         Development guide, architecture, threat-model, runbook placeholders
 Documentations/               PRD, HLD/LLD, agent/design rules, integration specs and team tasks
-frontend/dashboard/            Placeholder; no dashboard application is present
+frontend/dashboard/            React/Vite dashboard; live API client for registered backend routes, explicit demo mode
 src/cortexstone/
   agent/                      Model interfaces/adapters, prompts, schemas, routing, orchestrator
   api/                        FastAPI app, settings, dependencies, authenticated v1 routes
@@ -123,7 +132,7 @@ tests/                         Unit/security tests, retrieval integration test a
 
 ### Where delivery is behind the MVP plan
 
-The implementation now covers a backend vertical slice of **Remember** and a basic authenticated chat experience, as well as parts of **Protect**. Most of **Act** and the always-on user experience remain plans. There is no connected demonstration using live PostgreSQL/model infrastructure, an always-on scheduled brief, or an authorized action executed through a registered connector and verified in audit history.
+The implementation now covers a backend vertical slice of **Remember**, authenticated chat, a connected dashboard for registered APIs, and parts of **Protect**. Most of **Act** and the always-on user experience remain plans. There is no accepted end-to-end demonstration using live PostgreSQL/OIDC/model infrastructure, an always-on scheduled brief, or an authorized action executed through a registered connector and verified in audit history.
 
 Specifically, these P0 PRD requirements remain unproven or unimplemented:
 
@@ -132,6 +141,7 @@ Specifically, these P0 PRD requirements remain unproven or unimplemented:
 - G1: connected-repository secret scanning with redaction.
 - T1–T8: persisted grants and approvals, sandbox boundary, integrated audit trail, prompt-injection handling across all orchestration paths, revocation, and verified connector outcomes. OIDC token authentication is implemented, but the external provider's live setup is not validated.
 - Nebius deployment using an eligible NVIDIA model.
+- Dashboard typecheck, frontend tests, and production build added to CI, followed by browser acceptance against the deployed API.
 
 Some planned deliverables are explicitly staged or blocked on decisions (especially model and embedding selection), which is reasonable for a foundation branch. The project should not describe the MVP as complete until those gates are resolved and acceptance evidence exists.
 
@@ -155,7 +165,7 @@ Some planned deliverables are explicitly staged or blocked on decisions (especia
 
 ### Documentation and repository hygiene
 
-- Expand the root `README.md` implementation-status paragraph to mention authenticated chat and BGE-backed memory persistence/retrieval; it currently lists the migration and memory API but not those newer integrations.
+- Keep the root README and this review synchronized with merged implementation changes and distinguish API wiring from live runtime acceptance.
 - Keep superseded sections of `Documentations/MEMORY_API_INTEGRATION_SPEC.md` clearly labeled as historical; its later sections already identify the current contract and defer public search/edit/export.
 - Remove already tracked Python bytecode (`*.pyc` under `__pycache__`) from Git and keep it excluded. `.gitignore` does not automatically untrack files already committed.
 - Add live migration and PostgreSQL integration evidence before treating the persistence path as operationally validated.
@@ -164,6 +174,6 @@ Some planned deliverables are explicitly staged or blocked on decisions (especia
 
 **Architecture alignment: good.** The code largely respects the modular-monolith direction and the critical rule that the backend—not the model—decides whether an action may run.
 
-**Current stage: integrated backend vertical slice; MVP remains partial.** Authenticated memory CRUD/forget, PostgreSQL/pgvector migration wiring, BGE embedding persistence/retrieval, and a bounded chat path are implemented and covered by automated tests. The highest-value next step is live integration validation against PostgreSQL, OIDC, and the model provider, followed by durable authorization/approval and one verified connector action. Jobs, Telegram, Guardian, deployment, and dashboard remain future work.
+**Current stage: integrated backend vertical slice plus an API-connected dashboard; MVP remains partial.** Authenticated memory create/list/read/forget, PostgreSQL/pgvector migration wiring, BGE embedding persistence/retrieval, bounded chat, policy validation, and the dashboard client for registered API routes are implemented. The highest-value next step is live integration validation against PostgreSQL, OIDC, and the model provider, followed by durable authorization/approval and one verified connector action. Jobs, Telegram, Guardian scanning, production connector routes, and deployment remain future work.
 
-**Review validation:** repository and documentation inspection. Latest local validation: 302 tests passed; Ruff, Ruff formatting, and `git diff --check` passed. No live PostgreSQL, OIDC provider, model endpoint, connector, or deployment was exercised.
+**Review validation:** repository and documentation inspection at PR #22. CI is configured for backend checks; this documentation update did not run tests, frontend checks, or a deployment rehearsal. No live PostgreSQL, OIDC provider, model endpoint, connector, or deployment was exercised.
