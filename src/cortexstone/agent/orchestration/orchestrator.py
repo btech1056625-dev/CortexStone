@@ -1,7 +1,14 @@
 import logging
 from typing import Any
 
-from cortexstone.agent.models.interface import ModelClient, ModelMessage, ModelRole, Role
+from cortexstone.agent.models.interface import (
+    ModelClient,
+    ModelMessage,
+    ModelResponse,
+    ModelRole,
+    Role,
+    T,
+)
 from cortexstone.agent.orchestration.router import IntentRouter
 from cortexstone.agent.schemas.actions import AgentPlan, ProposedAction
 from cortexstone.agent.schemas.routing import RouteDecision
@@ -25,6 +32,26 @@ class AgentOrchestrator:
         self.max_tools_per_turn = 3
         self.timeout_seconds = 30.0
 
+    async def generate_structured_response(
+        self,
+        messages: list[ModelMessage],
+        schema: type[T],
+        *,
+        role: ModelRole = ModelRole.REASONER,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        timeout: float = 30.0,
+    ) -> ModelResponse[T]:
+        """Invoke the selected agent model and return its schema-validated response."""
+        return await self.model_client.generate_for_role(
+            role=role,
+            messages=messages,
+            schema=schema,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+
     async def run(self, user_message: str, context: list[dict[str, Any]]) -> list[ProposedAction]:
 
         # Step 1: Fast triage via Nemotron Mini Router
@@ -42,7 +69,7 @@ class AgentOrchestrator:
             # Max 5 planning iterations enforcement
             for iteration in range(self.max_iterations):
                 try:
-                    response = await self.model_client.generate_for_role(
+                    response = await self.generate_structured_response(
                         role=ModelRole.REASONER,
                         messages=messages,
                         schema=AgentPlan,

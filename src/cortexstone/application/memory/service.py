@@ -192,6 +192,32 @@ class MemoryService:
         )
         return [MemoryItemRead.model_validate(m) for m in models]
 
+    async def count_memories(
+        self,
+        owner_id: str,
+        filter_params: MemoryFilter | None = None,
+    ) -> int:
+        """Count active memories for an owner in bounded repository pages."""
+        if not owner_id or not owner_id.strip():
+            return 0
+
+        filters = filter_params or MemoryFilter()
+        count = 0
+        offset = 0
+        page_size = 100
+        while True:
+            page_filters = filters.model_copy(
+                update={"include_deleted": False, "limit": page_size, "offset": offset}
+            )
+            page = await self._repository.list(
+                owner_id=owner_id.strip(),
+                filter_params=page_filters,
+            )
+            count += len(page)
+            if len(page) < page_size:
+                return count
+            offset += page_size
+
     async def update_memory(
         self,
         owner_id: str,

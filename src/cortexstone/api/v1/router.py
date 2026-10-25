@@ -7,8 +7,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from cortexstone.api.dependencies import get_policy_engine, get_policy_principal
-from cortexstone.api.v1.schemas import ActionValidationRequest, ActionValidationResponse
+from cortexstone.api.auth import AuthenticatedUser
+from cortexstone.api.dependencies import (
+    get_authenticated_user,
+    get_policy_engine,
+    get_policy_principal,
+)
+from cortexstone.api.v1.schemas import (
+    ActionValidationRequest,
+    ActionValidationResponse,
+    CurrentUserResponse,
+)
 from cortexstone.security.policy import PolicyEngine, PolicyPrincipal
 
 logger = logging.getLogger(__name__)
@@ -17,9 +26,17 @@ router = APIRouter()
 operational_router = APIRouter(tags=["health"])
 
 
-@router.get("/health", tags=["health"])
+@router.get("/health", tags=["health"], include_in_schema=False)
 def versioned_health() -> dict[str, str]:
     return {"status": "ok", "api_version": "v1"}
+
+
+@router.get("/me", response_model=CurrentUserResponse, tags=["users"])
+def current_user(
+    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
+) -> CurrentUserResponse:
+    """Return the subject established by verified bearer-token claims."""
+    return CurrentUserResponse(id=user.subject, display_name=user.display_name)
 
 
 @router.post(
@@ -36,12 +53,14 @@ def validate_proposed_action(
     return ActionValidationResponse.from_decision(decision)
 
 
-@operational_router.get("/health/live")
+@operational_router.get("/health")
+@operational_router.get("/health/live", include_in_schema=False)
 def liveness() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@operational_router.get("/health/ready")
+@operational_router.get("/ready")
+@operational_router.get("/health/ready", include_in_schema=False)
 async def readiness(request: Request) -> dict[str, str]:
     engine = request.app.state.db_engine
     if engine is None:
