@@ -5,22 +5,27 @@
 Requirements: Python 3.12 or 3.13, Docker Desktop with its Linux engine running, and Docker Compose v2.
 
 1. Copy `.env.example` to `.env`. The sample password is for local development only. If you change it, use letters and numbers so it can be placed safely in the Compose database URL.
-2. Set `CORTEXSTONE_AUTH_ISSUER`, `CORTEXSTONE_AUTH_AUDIENCE`, and `CORTEXSTONE_AUTH_JWKS_URL` in `.env` to the HTTPS issuer, API audience, and signing-key endpoint for your OIDC provider. The API accepts RS256 bearer access tokens with valid `iss`, `aud`, `exp`, and non-empty `sub` claims. All three settings are required together; with them unset, protected routes fail closed with `503`.
-3. Start the database and API:
+2. Set `CORTEXSTONE_AUTH_ISSUER`, `CORTEXSTONE_AUTH_AUDIENCE`, and `CORTEXSTONE_AUTH_JWKS_URL` in `.env` to the HTTPS issuer, API audience, and signing-key endpoint for your OIDC provider. The API accepts RS256 bearer access tokens with valid `iss`, `aud`, `exp`, and non-empty `sub` claims. All three settings are required together; with them unset, protected routes fail closed with `503`. For a browser dashboard on another origin, set `CORTEXSTONE_CORS_ORIGINS` to its exact origin (comma-separated if needed); wildcards and paths are rejected.
+3. Start PostgreSQL, apply migrations, and start the API:
 
    ```powershell
    Copy-Item .env.example .env
-   docker compose up --build
+   docker compose up --build --wait
    ```
+
+   Compose waits for PostgreSQL health, runs the one-shot `migrate` service, and starts the API only after Alembic succeeds. The API health check then verifies database connectivity. If startup stops, inspect `docker compose ps` and `docker compose logs db migrate api`.
+
+   PostgreSQL reads `POSTGRES_PASSWORD` only when it initializes an empty data volume. If reusing an existing volume, `.env` must contain the password already stored in that database. Changing the variable does not rotate the database role password; resolve a mismatch through an intentional database credential rotation. Do not remove the volume to work around an authentication error unless erasing that database is intended.
 
    The API is available at `http://localhost:8000`; PostgreSQL is available to host tools at `localhost:5433` by default.
-4. Apply the database schema and required PostgreSQL `vector` extension:
+4. Confirm service health and migration state:
 
    ```powershell
-   docker compose exec api python -m alembic upgrade head
+   docker compose ps
+   docker compose exec api python -m alembic current
    ```
 
-   Migrations are versioned in `src/cortexstone/db/migrations` and are not applied automatically at API startup.
+   Migrations are versioned in `src/cortexstone/db/migrations`. For later schema updates on an existing stack, run `docker compose run --rm migrate` before relying on the API.
 5. Check liveness and readiness:
 
    ```powershell

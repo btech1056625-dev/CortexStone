@@ -59,7 +59,9 @@ async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
     url = get_url()
     if url:
-        configuration["sqlalchemy.url"] = str(async_database_url(url))
+        # Keep SQLAlchemy's URL object intact: str(URL) masks the password, which
+        # would pass the literal `***` to asyncpg and make fresh migrations fail.
+        configuration["sqlalchemy.url"] = async_database_url(url)
 
     connectable = async_engine_from_config(
         configuration,

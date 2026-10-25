@@ -21,6 +21,8 @@ Checks: `npm run typecheck` · `npm test` · `npm run build` · `npm audit`
 | `VITE_API_BASE_URL` | empty, or an `https` origin | Empty uses the Vite dev proxy. `http` is accepted only for localhost. Credentials, query strings and fragments are rejected. |
 | `VITE_API_PROXY_TARGET` | URL, default `http://localhost:8000` | Dev proxy target only; read by `vite.config.ts`, not bundled. |
 
+For cross-origin hosting, configure the API's `CORTEXSTONE_CORS_ORIGINS` with the dashboard's exact origin. This is a backend setting in the repository-root `.env`, not a `VITE_*` value. The Vite development proxy avoids cross-origin requests locally.
+
 ## Modes
 
 - **mock**: simulated data for all eight sections, labelled in the shared header as a simulated sandbox. Nothing is described as a real operation.
@@ -29,9 +31,11 @@ Checks: `npm run typecheck` · `npm test` · `npm run build` · `npm audit`
 ## Backend
 
 ```bash
-docker compose up --build            # repo root; API on :8000
+docker compose up --build --wait   # repo root; API on :8000
 curl localhost:8000/health
 ```
+
+Protected API routes require a valid OIDC bearer token. The API validates identity server-side; the dashboard must not invent an identity or put secrets in its public environment variables.
 
 ## What is real
 
@@ -40,7 +44,7 @@ curl localhost:8000/health
 | Health (`/health`, `/ready`, `/api/v1/me`) | Live | Simulated |
 | Actions: `POST /api/v1/actions/validate` | Live; policy validation only, never execution | Simulated policy |
 | Overview approvals and activity | Not available (no endpoint) | Simulated |
-| Chat | Not available (no `/api/v1/chat` route) | Simulated |
+| Chat | The backend route exists at `POST /api/v1/chat`, but this dashboard client currently marks chat unavailable | Simulated |
 | Memory (list, create, filter, forget) | Live (`/api/v1/memories`) | Simulated, create/forget persist for the session |
 | GitHub and Google Calendar | Read-only repository, issue, pull-request, workflow-run, and event views | Simulated read-only data |
 | Cortexstone Notes | CRUD (`/api/v1/notes`) | Simulated CRUD, session-only |
@@ -49,9 +53,9 @@ curl localhost:8000/health
 
 ## Security notes
 
-- No secrets, tokens or user identity live in the frontend. The API derives identity server-side.
+- No secrets or API credentials belong in the frontend. Protected-route identity comes from the verified OIDC bearer token.
 - All server and model text is rendered as plain text; the codebase has no `innerHTML`.
 - Action arguments are held in memory only. The sole browser-storage use is the sidebar-collapsed preference.
 - Destructive actions (forget) use a confirmation dialog and block duplicate submission.
 - GitHub and Calendar have no write or provider connection controls in this MVP. Notes are the only built-in CRUD connector.
-- The backend registers no CORS middleware: use the dev proxy, serve same-origin, or add CORS server-side.
+- The API enables CORS only for explicit origins configured in `CORTEXSTONE_CORS_ORIGINS`; wildcards are rejected. Use the Vite dev proxy for local development.
