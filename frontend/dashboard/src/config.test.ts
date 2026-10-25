@@ -8,7 +8,7 @@ describe('parseConfig', () => {
     expect(Object.values(API_PATHS)).not.toContain('/health/ready');
     expect(Object.values(API_PATHS)).not.toContain('/api/v1/health');
   });
-  it('defaults to mock with the dev proxy', () => expect(parseConfig({})).toEqual({ mode: 'mock', apiBase: '', error: null }));
+  it('defaults to live with the dev proxy', () => expect(parseConfig({})).toEqual({ mode: 'live', apiBase: '', error: null }));
   it('rejects unknown modes instead of guessing', () => expect(parseConfig({ VITE_DATA_MODE: 'prod' }).error).toMatch(/mock.*live/));
   it('allows https and localhost http only', () => {
     expect(parseConfig({ VITE_DATA_MODE: 'live', VITE_API_BASE_URL: 'https://api.example.com/' }).apiBase).toBe('https://api.example.com');

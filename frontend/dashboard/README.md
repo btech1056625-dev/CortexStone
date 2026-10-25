@@ -17,7 +17,7 @@ Checks: `npm run typecheck` · `npm test` · `npm run build` · `npm audit`
 
 | Variable | Values | Notes |
 |---|---|---|
-| `VITE_DATA_MODE` | `mock` (default) or `live` | Anything else shows a configuration error and makes no requests. |
+| `VITE_DATA_MODE` | `live` (default) or `mock` | Live is the default. Mock data is available only when explicitly selected. Anything else shows a configuration error and makes no requests. |
 | `VITE_API_BASE_URL` | empty, or an `https` origin | Empty uses the Vite dev proxy. `http` is accepted only for localhost. Credentials, query strings and fragments are rejected. |
 | `VITE_API_PROXY_TARGET` | URL, default `http://localhost:8000` | Dev proxy target only; read by `vite.config.ts`, not bundled. |
 
@@ -25,8 +25,8 @@ For cross-origin hosting, configure the API's `CORTEXSTONE_CORS_ORIGINS` with th
 
 ## Modes
 
-- **mock**: simulated data for all eight sections, labelled in the shared header as a simulated sandbox. Nothing is described as a real operation.
-- **live**: real responses only. Unreachable API, 401/403, 503 and unregistered routes are shown as they are. There is no silent fallback to mock.
+- **live**: default mode; uses the real health, readiness, identity, chat, policy-validation, and owner-scoped memory routes. Unreachable API, 401/403, 503 and unsupported routes are surfaced without fallback.
+- **mock**: simulated responses only when explicitly selected. The shared header labels this mode as a sandbox.
 
 ## Backend
 
@@ -35,7 +35,7 @@ docker compose up --build --wait   # repo root; API on :8000
 curl localhost:8000/health
 ```
 
-Protected API routes require a valid OIDC bearer token. The API validates identity server-side; the dashboard must not invent an identity or put secrets in its public environment variables.
+Protected API routes require a valid OIDC bearer token. Paste a valid token into Settings for the current tab; it stays in page memory and is cleared on reload. The API validates identity server-side; the dashboard does not invent an identity or put secrets in public environment variables.
 
 ## What is real
 
@@ -44,10 +44,9 @@ Protected API routes require a valid OIDC bearer token. The API validates identi
 | Health (`/health`, `/ready`, `/api/v1/me`) | Live | Simulated |
 | Actions: `POST /api/v1/actions/validate` | Live; policy validation only, never execution | Simulated policy |
 | Overview approvals and activity | Not available (no endpoint) | Simulated |
-| Chat | The backend route exists at `POST /api/v1/chat`, but this dashboard client currently marks chat unavailable | Simulated |
+| Chat | Live (`POST /api/v1/chat`) | Simulated |
 | Memory (list, create, filter, forget) | Live (`/api/v1/memories`) | Simulated, create/forget persist for the session |
-| GitHub and Google Calendar | Read-only repository, issue, pull-request, workflow-run, and event views | Simulated read-only data |
-| Cortexstone Notes | CRUD (`/api/v1/notes`) | Simulated CRUD, session-only |
+| GitHub, Google Calendar, Cortexstone Notes | Not registered on the backend; shown unavailable and not called | Simulated data |
 | Jobs, Guardian | Not available (no routes) | Simulated; Guardian scanning is disabled with an explanation |
 | Settings | Connection details | Mode details |
 

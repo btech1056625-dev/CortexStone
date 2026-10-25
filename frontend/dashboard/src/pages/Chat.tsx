@@ -98,12 +98,12 @@ export default function Chat() {
   return (
     <div className="page chat">
       <PageHeader title="Chat workbench" sub="Conversation and policy review stay separate. A proposal is never executed here." />
-      {!enabled && <Banner tone="warn" title="Chat isn't available yet">The live API does not register <code>/api/v1/chat</code>. No message is sent in live mode.</Banner>}
+      {!enabled && <Banner tone="warn" title="Chat isn't available yet">Chat is unavailable in the current backend mode.</Banner>}
       <div className="chat-workbench">
         <section className="panel chat-conversation" aria-label="Conversation workbench">
           <header><div><span className="eyebrow">CONVERSATION</span><h2>Assistant stream</h2></div><span className="scenario-indicator">{api.mode === 'mock' ? 'SANDBOX' : 'LIVE'}</span></header>
           <div className="log" role="log" aria-live="polite" aria-label="Conversation">
-            {msgs.length === 0 && <Empty title="Start a conversation">{enabled ? 'Ask a question or try “delete old note_001” to see a policy proposal.' : 'Conversation will be available when the backend registers chat.'}</Empty>}
+            {msgs.length === 0 && <Empty title="Start a conversation">{enabled ? 'Ask the live assistant a question.' : 'Conversation is unavailable in the current backend mode.'}</Empty>}
             {msgs.map((message) => (
               <article key={message.id} className={`msg ${message.role}`}>
                 <div className="who">{message.role === 'user' ? 'YOU' : 'CORTEXSTONE'}</div>
