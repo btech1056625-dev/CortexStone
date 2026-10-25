@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import cortexstone.db.models.memory  # noqa: F401
 from cortexstone.db.base import Base
+from cortexstone.db.session import async_database_url
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -58,7 +59,7 @@ async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
     url = get_url()
     if url:
-        configuration["sqlalchemy.url"] = url
+        configuration["sqlalchemy.url"] = str(async_database_url(url))
 
     connectable = async_engine_from_config(
         configuration,

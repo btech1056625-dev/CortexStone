@@ -35,6 +35,6 @@ The README files in the scaffolded directories describe their intended responsib
 
 ## Implementation status
 
-The repository now includes a minimal FastAPI bootstrap, PostgreSQL/pgvector Compose development environment, and CI checks. Product workflows, database migrations, authentication, and production deployment are not implemented yet.
+The repository now includes a FastAPI bootstrap, PostgreSQL/pgvector Compose development environment, an Alembic migration for the initial memory table, OIDC bearer-token verification, owner-scoped memory endpoints, and CI checks. The API relies on an external OIDC provider for token issuance; login and token issuance are not implemented in this repository.
 
 See [development setup and API integration conventions](./docs/DEVELOPMENT.md) to start the local environment and run checks.

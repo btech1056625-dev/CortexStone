@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 
-def _async_database_url(database_url: str) -> str | URL:
+def async_database_url(database_url: str) -> str | URL:
     """Select asyncpg for standard PostgreSQL URLs."""
     parsed_url = make_url(database_url)
     if parsed_url.drivername == "postgresql":
@@ -46,7 +46,7 @@ def create_engine_from_url(
         raise ValueError("database_url must be provided and non-empty.")
 
     return create_async_engine(
-        _async_database_url(database_url),
+        async_database_url(database_url),
         echo=echo,
         pool_size=pool_size,
         max_overflow=max_overflow,

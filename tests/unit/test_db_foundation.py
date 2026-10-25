@@ -7,6 +7,7 @@ from sqlalchemy import Column, Integer, String
 
 from cortexstone.db.base import POSTGRES_NAMING_CONVENTION, Base, TimestampMixin, utc_now
 from cortexstone.db.session import (
+    async_database_url,
     create_engine_from_url,
     create_session_factory,
 )
@@ -59,6 +60,18 @@ def test_create_engine_uses_asyncpg_for_postgresql_url():
     engine = create_engine_from_url("postgresql://user:password@localhost/cortexstone")
 
     assert engine.url.drivername == "postgresql+asyncpg"
+
+
+def test_async_database_url_uses_asyncpg_for_postgresql_url():
+    url = async_database_url("postgresql://localhost/cortexstone")
+
+    assert str(url) == "postgresql+asyncpg://localhost/cortexstone"
+
+
+def test_async_database_url_preserves_existing_driver():
+    url = async_database_url("postgresql+asyncpg://localhost/cortexstone")
+
+    assert str(url) == "postgresql+asyncpg://localhost/cortexstone"
 
 
 def test_session_factory_creation():

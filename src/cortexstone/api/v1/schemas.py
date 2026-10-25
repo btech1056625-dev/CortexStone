@@ -2,9 +2,10 @@
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from cortexstone.agent.schemas.actions import ProposedAction
+from cortexstone.memory.schemas import MemoryItemCreate, MemoryItemRead, MemoryKind
 from cortexstone.security.policy import PolicyDecision, PolicyReason, PolicyStatus, RiskLevel
 
 ChatMessage = Annotated[
@@ -18,7 +19,7 @@ ChatAnswer = Annotated[
 
 
 class ChatRequest(BaseModel):
-    """A user message, optionally continuing an existing conversation."""
+    """A user message with an optional opaque correlation ID."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -35,7 +36,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     """An assistant answer and any bounded, unexecuted action proposals."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     conversation_id: str | None = Field(
         default=None,
@@ -52,6 +53,70 @@ class ChatResponse(BaseModel):
         if self.answer is None and not self.proposed_actions:
             raise ValueError("A chat response must include an answer or proposed action")
         return self
+
+
+class CurrentUserResponse(BaseModel):
+    """Authenticated identity fields exposed to the frontend."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    display_name: str
+    authenticated: bool = True
+
+
+class MemoryCreateRequest(BaseModel):
+    """Frontend memory fields accepted for creating an owner-scoped memory."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    content: Annotated[str, StringConstraints(strip_whitespace=True, strict=True, min_length=1)]
+    memory_type: MemoryKind
+
+    def to_domain(self) -> MemoryItemCreate:
+        return MemoryItemCreate(
+            content=self.content,
+            kind=self.memory_type,
+            source_type="user",
+            confidence=1.0,
+        )
+
+
+class MemoryResponse(BaseModel):
+    """Stable frontend memory representation without owner or embedding data."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    content: str
+    memory_type: MemoryKind
+    source: str | None
+    confidence: float | None
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
+
+    @classmethod
+    def from_memory(cls, memory: MemoryItemRead) -> "MemoryResponse":
+        return cls(
+            id=str(memory.id),
+            content=memory.content,
+            memory_type=memory.kind,
+            source=memory.source_type,
+            confidence=memory.confidence,
+            created_at=memory.created_at,
+            updated_at=memory.updated_at,
+        )
+
+
+class MemoryPageResponse(BaseModel):
+    """Owner-scoped memory page matching the frontend contract."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[MemoryResponse]
+    total: int
+    limit: int
+    offset: int
 
 
 class ActionValidationRequest(BaseModel):

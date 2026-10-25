@@ -6,9 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml README.md ./
+COPY alembic.ini ./
 COPY src ./src
 
-RUN python -m pip install --no-cache-dir .
+RUN python -m pip install --no-cache-dir ".[postgres,embeddings]"
 
 USER 10001:10001
 

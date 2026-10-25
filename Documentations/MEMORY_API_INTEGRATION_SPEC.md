@@ -3,18 +3,18 @@
 **Document Version:** 1.0
 **Target Audience:** Bhavya Fonseca (Backend & Infrastructure Lead), Archis Samanta (ML/DL Lead), Himanshu (Agents Core), Raghav (Security)
 **Author:** Apurva (Database & Memory Subsystem Lead)
-**Status:** Proposal & Integration Contract (Documentation Only)
+**Status:** Implemented API contract; see the source and development guide for runtime configuration.
 **Date:** October 2026
 
 ---
 
 ## 1. Purpose and Scope
 
-This document specifies the exact REST API contracts, security boundaries, and dependency injection patterns required for Bhavya Fonseca to expose Apurva's existing memory subsystem within the CortexStone FastAPI application (`src/cortexstone/api/`).
+This document specifies the REST API contracts, security boundaries, and dependency injection patterns for exposing the memory subsystem within the CortexStone FastAPI application (`src/cortexstone/api/`). Authenticated routes are implemented in `src/cortexstone/api/v1/memories.py` and `src/cortexstone/api/dependencies.py`.
 
 ### 1.1. Context & Invariants
 - **Domain Status:** All underlying schemas, models, repositories, application memory services, retrieval engines, prompt formatters, and offline benchmarks are fully implemented and verified with 90 passing automated tests.
-- **Scope Limit:** This document is **contract design and documentation only**. It does not create production API routes, modify another teammate's files, commit to an unresolved embedding model/dimension, or implement a premature authentication system.
+- **Implementation Note:** This began as a contract proposal. The memory routes now use OIDC bearer-token verification and owner scoping. The `X-User-ID` example formerly shown below was unsafe and must not be used; identity is derived only from the verified token subject.
 - **Teammate Ownership:**
   - **Apurva (Database & Memory):** Owns schemas, models, repositories, lifecycle service, retrieval, context formatting, and evaluation harness.
   - **Bhavya (Backend & Infrastructure):** Owns FastAPI composition, routing (`src/cortexstone/api/v1/`), dependency injection, and server configuration.
@@ -57,9 +57,9 @@ The proposed API routes directly delegate to existing, testable service interfac
 
 ---
 
-## 3. Proposed Endpoint Contracts
+## 3. Historical Endpoint Proposal — Superseded
 
-All routes should be mounted under the `/api/v1` prefix in `src/cortexstone/api/v1/memories.py`.
+This section and its examples predate the frontend API contract draft v2. They are retained only as historical service-integration notes and are not the public HTTP contract. For public endpoints and fields, use the frontend contract draft v2 and the route schemas in `src/cortexstone/api/v1/`. The public MVP exposes only `GET/POST /api/v1/memories`, `GET/DELETE /api/v1/memories/{memory_id}`, and `GET /api/v1/me`; it does not expose memory search, export, or update.
 
 ### 3.1. Create Memory Record
 - **Method / Path:** `POST /api/v1/memories`
@@ -149,7 +149,9 @@ All routes should be mounted under the `/api/v1` prefix in `src/cortexstone/api/
 
 ---
 
-## 4. Concrete Request & Response Examples
+## 4. Historical Request & Response Examples — Superseded
+
+The examples below show earlier proposed API shapes and must not be used for frontend implementation. They are retained as historical reference only; current request and response shapes are defined by frontend API contract draft v2 and the live OpenAPI schema.
 
 ### 4.1. `POST /api/v1/memories`
 
@@ -304,13 +306,14 @@ Bhavya's FastAPI app entry point (`src/cortexstone/api/main.py`) already defines
 }
 ```
 
-### Standard Status Codes for Memory API:
-- `400 Bad Request` (`code: "invalid_input"`): Missing or whitespace-only content or query.
-- `401 Unauthorized` (`code: "unauthorized"`): Missing, expired, or invalid authorization header.
-- `404 Not Found` (`code: "not_found"`): Item missing, deleted, or belongs to another owner.
-- `422 Unprocessable Entity` (`code: "invalid_request"`): Pydantic schema validation failure.
-- `500 Internal Server Error` (`code: "internal_server_error"`): Verifiable forgetting assertion failure.
-- `503 Service Unavailable` (`code: "service_unavailable"`): Database or embedding provider unavailable.
+### Current Status Codes for the Public Memory API:
+- `201 Created`: Memory created.
+- `204 No Content`: Memory forgotten.
+- `401 Unauthorized` (`code: "unauthorized"`): Missing, expired, or invalid bearer token.
+- `404 Not Found` (`code: "not_found"`): Item missing, deleted, malformed, or belongs to another owner.
+- `422 Unprocessable Entity` (`code: "invalid_request"`): Request validation failure.
+- `500 Internal Server Error` (`code: "internal_server_error"`): Unexpected internal error, including a forget-verification failure.
+- `503 Service Unavailable` (`code: "service_unavailable"`): Authentication is not configured, identity keys are unavailable, or the database is unavailable.
 
 ---
 
@@ -318,74 +321,48 @@ Bhavya's FastAPI app entry point (`src/cortexstone/api/main.py`) already defines
 
 To wire the memory routes into FastAPI cleanly without tight coupling:
 
-### 7.1. Required FastAPI Dependencies
-Bhavya should define the following dependencies in `src/cortexstone/api/dependencies.py` or `apps/api/dependencies.py`:
+### 7.1. FastAPI Dependencies
+
+`src/cortexstone/api/dependencies.py` provides the request-scoped database session, `get_authenticated_user`, and `get_memory_service`. Authentication validates an RS256 bearer token against the configured OIDC issuer, audience, and JWKS URL (`CORTEXSTONE_AUTH_ISSUER`, `CORTEXSTONE_AUTH_AUDIENCE`, and `CORTEXSTONE_AUTH_JWKS_URL`). All three HTTPS-backed settings are required together. Missing or invalid credentials receive `401`; when identity configuration is absent, protected routes fail closed with `503`.
+
+The authenticated identity is the token's non-empty `sub` claim. Do not use `X-User-ID` or accept `owner_id` in request payloads. Each memory operation passes the verified subject to the service, whose repository filters reads and writes by that owner. Mutating routes commit their request-scoped transaction.
 
 ```python
-from typing import AsyncGenerator
-from fastapi import Depends, HTTPException, Header, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Annotated
 
-from cortexstone.db.session import async_session_factory
-from cortexstone.memory.repositories.memory_repo import SqlAlchemyMemoryRepository
+from fastapi import Depends
+
+from cortexstone.api.auth import AuthenticatedUser
+from cortexstone.api.v1.schemas import MemoryCreateRequest, MemoryResponse
 from cortexstone.application.memory.service import MemoryService
-from cortexstone.memory.retrieval.retriever import MemoryRetrievalService
-from cortexstone.security.audit.service import InMemoryAuditLogger
+from cortexstone.api.dependencies import get_authenticated_user, get_memory_service
 
 
-# 1. Database session generator
-async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
-        yield session
-
-
-# 2. Authenticated user ID provider (Prerequisite from Raghav/Bhavya)
-async def get_current_user_id(
-    x_user_id: str = Header(None, alias="X-User-ID"),
-    authorization: str = Header(None, alias="Authorization"),
-) -> str:
-    """Extract authenticated user identity from verified headers.
-
-    NOTE: Currently a placeholder until Raghav/Bhavya implement JWT verification.
-    MUST NOT accept unauthenticated callers in production.
-    """
-    user_id = x_user_id or authorization
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required.",
-        )
-    return user_id.strip()
-
-
-# 3. MemoryService factory
-async def get_memory_service(
-    session: AsyncSession = Depends(get_db_session),
-) -> MemoryService:
-    repo = SqlAlchemyMemoryRepository(session=session)
-    audit = InMemoryAuditLogger()
-    return MemoryService(repository=repo, audit_logger=audit)
-
-
-# 4. MemoryRetrievalService factory
-async def get_retrieval_service(
-    session: AsyncSession = Depends(get_db_session),
-) -> MemoryRetrievalService:
-    repo = SqlAlchemyMemoryRepository(session=session)
-    # EmbeddingProvider is injected from app state or configuration
-    provider = ...  # Injected concrete EmbeddingProvider
-    return MemoryRetrievalService(repository=repo, embedding_provider=provider)
+async def create_memory_endpoint(
+    payload: MemoryCreateRequest,
+    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
+    memory_service: Annotated[MemoryService, Depends(get_memory_service)],
+) -> MemoryResponse:
+    memory = await memory_service.create_memory(
+        owner_id=user.subject,
+        item=payload.to_domain(),
+    )
+    return MemoryResponse.from_memory(memory)
 ```
 
 ### 7.2. Route Handler Signature Pattern
 ```python
-@router.post("/memories", status_code=status.HTTP_201_CREATED, response_model=MemoryItemRead)
+@router.post("/memories", status_code=status.HTTP_201_CREATED, response_model=MemoryResponse)
 async def create_memory_endpoint(
-    payload: MemoryItemCreate,
-    current_user_id: str = Depends(get_current_user_id),
+    payload: MemoryCreateRequest,
+    user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
     memory_service: MemoryService = Depends(get_memory_service),
-) -> MemoryItemRead:
-    return await memory_service.create_memory(owner_id=current_user_id, item=payload)
+) -> MemoryResponse:
+    memory = await memory_service.create_memory(
+        owner_id=user.subject,
+        item=payload.to_domain(),
+    )
+    return MemoryResponse.from_memory(memory)
 ```
 
 ---
@@ -395,13 +372,15 @@ async def create_memory_endpoint(
 | Teammate | Assigned Responsibility | Deliverable / Integration Target |
 | :--- | :--- | :--- |
 | **Apurva** (DB & Memory) | Database models, schemas, repositories, lifecycle service, retrieval ranking, prompt formatting, evaluation. | `src/cortexstone/db/`, `src/cortexstone/memory/`, `src/cortexstone/application/memory/` (All Complete & Tested). |
-| **Bhavya** (Backend/Infra) | FastAPI routes, settings, dependency injection, application startup, Docker deployment. | Implement `src/cortexstone/api/v1/memories.py` and `dependencies.py` adhering to this specification. |
+| **Bhavya** (Backend/Infra) | FastAPI routes, settings, dependency injection, application startup, Docker deployment. | The memory API routes, OIDC settings, and dependency injection are implemented in `src/cortexstone/api/`. |
 | **Himanshu** (Agents Core) | Agent orchestration loop and runtime integration. | When `route.intent == IntentCategory.MEMORY_RECALL`, call `retrieval_service.retrieve` and wrap prompt in `format_memory_context`. |
-| **Raghav** (Cyber Security) | Auth token verification middleware and central secret redaction pipeline. | Implement `get_current_user_id` authentication verification and secret sanitizer before memory write. |
+| **Raghav** (Cyber Security) | Auth token verification and central secret redaction pipeline. | OIDC token verification is implemented; secret sanitization before memory writes remains a separate integration task. |
 
 ---
 
-## 9. Open Questions Requiring Team Discussion
+## 9. Historical Open Questions — Superseded
+
+These questions predate frontend API contract draft v2 and are retained as historical notes only. Authentication now uses OIDC RS256 bearer tokens; BGE-small at 384 dimensions is configured; memory listing uses `{items, total, limit, offset}` with a default limit of 20 and maximum of 100. Public memory search, edit, and export are deferred and must not be added without an agreed frontend contract. Chat, connectors, and notes are outside this memory API implementation.
 
 1. **Authentication Token Protocol:**
    - *Question for Raghav & Bhavya:* Will the frontend send standard JWT Bearer tokens, or will local development use mock header authentication (`X-User-ID: <id>`)?
