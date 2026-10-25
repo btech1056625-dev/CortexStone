@@ -50,7 +50,7 @@ export default function Memory() {
           <input id="memory-content" value={content} onChange={(event) => setContent(event.target.value)} maxLength={2000} placeholder="Add a user-stated memory…" />
           <label className="sr" htmlFor="memory-kind">Memory type</label>
           <select id="memory-kind" value={newKind} onChange={(event) => setNewKind(event.target.value as MemoryKind)}>
-            <option value="fact">Fact</option><option value="preference">Preference</option><option value="context">Context</option>
+            <option value="fact">Fact</option><option value="episode">Episode</option><option value="skill">Skill</option>
           </select>
           <button className="btn primary" type="submit" disabled={creating || !content.trim()}>{creating ? 'Adding…' : 'Add memory'}</button>
         </form>
@@ -59,7 +59,7 @@ export default function Memory() {
           <label className="sr" htmlFor="mp">Provenance</label>
           <select id="mp" value={prov} onChange={(e) => setProv(e.target.value as typeof prov)}><option value="all">All provenance</option><option value="stated">Stated by you</option><option value="inferred">Inferred</option></select>
           <label className="sr" htmlFor="mk">Kind</label>
-          <select id="mk" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}><option value="all">All types</option><option value="fact">Fact</option><option value="preference">Preference</option><option value="context">Context</option></select>
+          <select id="mk" value={kind} onChange={(e) => setKind(e.target.value as typeof kind)}><option value="all">All types</option><option value="fact">Fact</option><option value="episode">Episode</option><option value="skill">Skill</option></select>
         </div>
         {!loading && !error && <div className="source-breakdown" aria-label={`Source provenance: ${userCount} user-stated, ${inferredCount} inferred`}>
           <div><span>Source provenance</span><span>{userCount} user-stated · {inferredCount} inferred</span></div>

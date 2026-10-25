@@ -41,7 +41,7 @@ export interface HealthSnapshot {
   simulated: boolean;
 }
 
-export type MemoryKind = 'fact' | 'preference' | 'context' | 'episode' | 'skill';
+export type MemoryKind = 'fact' | 'episode' | 'skill';
 export interface MemoryRecord { id: string; content: string; kind: MemoryKind; source: string; inferred: boolean; confidence: number; createdAt: string }
 export interface CreateMemory { content: string; kind: MemoryKind }
 export type JobStatus = 'queued' | 'running' | 'retry_wait' | 'awaiting_approval' | 'succeeded' | 'failed' | 'cancelled';

@@ -75,15 +75,15 @@ describe('live mode', () => {
   });
   it('creates memories through the contract endpoint without a browser user id', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({
-      id: 'memory-1', content: 'Prefers concise summaries', memory_type: 'preference', source: 'user',
+      id: 'memory-1', content: 'Prefers concise summaries', memory_type: 'fact', source: 'user',
       confidence: 1, created_at: '2026-10-30T00:00:00Z',
     }), { status: 201 }));
     vi.stubGlobal('fetch', fetchMock);
-    const result = await createApi('live', '').createMemory({ content: 'Prefers concise summaries', kind: 'preference' });
+    const result = await createApi('live', '').createMemory({ content: 'Prefers concise summaries', kind: 'fact' });
     expect(result.ok).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith('/api/v1/memories', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ content: 'Prefers concise summaries', memory_type: 'preference' }),
+      body: JSON.stringify({ content: 'Prefers concise summaries', memory_type: 'fact' }),
     }));
   });
 });

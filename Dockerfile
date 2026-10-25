@@ -11,6 +11,13 @@ COPY src ./src
 
 RUN python -m pip install --no-cache-dir ".[postgres,embeddings]"
 
+ENV HOME=/home/cortexstone \
+    HF_HOME=/home/cortexstone/.cache/huggingface \
+    XDG_CACHE_HOME=/home/cortexstone/.cache
+
+RUN mkdir -p /home/cortexstone/.cache/huggingface \
+    && chown -R 10001:10001 /home/cortexstone
+
 USER 10001:10001
 
 EXPOSE 8000
