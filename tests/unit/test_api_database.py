@@ -1,6 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi import HTTPException
 
@@ -92,6 +93,33 @@ def test_database_url_is_loaded_from_environment(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/test")
 
     assert Settings.from_environment().database_url == "postgresql://localhost/test"
+
+
+def test_cors_origins_are_loaded_and_applied_to_preflight(monkeypatch):
+    origin = "http://localhost:5173"
+    monkeypatch.setenv("CORTEXSTONE_CORS_ORIGINS", origin)
+    settings = Settings.from_environment()
+    application = create_app(settings)
+
+    async def send_preflight() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application),
+            base_url="http://testserver",
+        ) as client:
+            return await client.options(
+                "/api/v1/chat",
+                headers={
+                    "Origin": origin,
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": "authorization,content-type",
+                },
+            )
+
+    response = asyncio.run(send_preflight())
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == origin
+    assert "authorization" in response.headers["access-control-allow-headers"].lower()
 
 
 def test_app_builds_application_scoped_engine_and_session_factory():

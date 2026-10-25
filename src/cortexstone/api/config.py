@@ -16,6 +16,7 @@ class Settings(BaseModel):
 
     database_url: str | None = Field(default=None, repr=False)
     notes_search_allowed_targets: tuple[str, ...] = ()
+    cors_allowed_origins: tuple[str, ...] = ()
     nebius_api_key: str | None = Field(default=None, repr=False)
     nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1"
     nebius_router_model_id: str = "nvidia/nemotron-mini-4b-instruct"
@@ -77,15 +78,40 @@ class Settings(BaseModel):
             raise ValueError("Configured policy targets must be unique")
         return targets
 
+    @field_validator("cors_allowed_origins")
+    @classmethod
+    def validate_cors_origins(cls, origins: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(origins)) != len(origins):
+            raise ValueError("CORS origins must be unique")
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if (
+                not origin
+                or origin != origin.strip()
+                or parsed.scheme not in {"http", "https"}
+                or not parsed.netloc
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or parsed.username is not None
+                or parsed.password is not None
+                or "*" in origin
+            ):
+                raise ValueError("CORS origins must be explicit HTTP(S) origins")
+        return origins
+
     @classmethod
     def from_environment(cls) -> Self:
         """Read the API's supported environment configuration."""
         database_url = os.getenv("DATABASE_URL")
         raw_targets = os.getenv("CORTEXSTONE_POLICY_NOTES_SEARCH_TARGETS", "")
         targets = tuple(target.strip() for target in raw_targets.split(",") if target.strip())
+        raw_origins = os.getenv("CORTEXSTONE_CORS_ORIGINS", "")
+        origins = tuple(origin.strip() for origin in raw_origins.split(",") if origin.strip())
         return cls(
             database_url=database_url,
             notes_search_allowed_targets=targets,
+            cors_allowed_origins=origins,
             nebius_api_key=os.getenv("NEBIUS_API_KEY"),
             nebius_base_url=os.getenv(
                 "NEBIUS_BASE_URL",

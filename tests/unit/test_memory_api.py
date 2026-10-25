@@ -183,6 +183,50 @@ def test_memory_owned_by_another_subject_is_not_disclosed():
     assert memory_service.owner_ids == ["verified-subject"]
 
 
+def test_memory_owned_by_another_subject_cannot_be_forgotten():
+    application, memory_service, session = configured_app()
+    memory_service.forget_memory = AsyncMock(
+        return_value=type("Receipt", (), {"status": "not_found"})()
+    )
+    memory_id = uuid4()
+
+    async def send_request() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application),
+            base_url="http://testserver",
+        ) as client:
+            return await client.delete(f"/api/v1/memories/{memory_id}")
+
+    response = asyncio.run(send_request())
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+    memory_service.forget_memory.assert_awaited_once_with(
+        owner_id="verified-subject",
+        memory_id=memory_id,
+    )
+    session.commit.assert_not_awaited()
+
+
+def test_memory_update_is_not_exposed():
+    application, _, _ = configured_app()
+    memory_id = uuid4()
+
+    async def send_request() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application),
+            base_url="http://testserver",
+        ) as client:
+            return await client.patch(
+                f"/api/v1/memories/{memory_id}",
+                json={"content": "Try to alter another user's memory."},
+            )
+
+    response = asyncio.run(send_request())
+
+    assert response.status_code == 405
+
+
 def test_memory_search_export_and_patch_are_not_public_contract_routes():
     application, _, _ = configured_app()
 

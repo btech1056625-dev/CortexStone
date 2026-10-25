@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -85,6 +86,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.policy_engine = build_policy_engine(
         configured_settings.notes_search_allowed_targets
     )
+
+    if configured_settings.cors_allowed_origins:
+        application.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(configured_settings.cors_allowed_origins),
+            allow_methods=["GET", "POST", "DELETE"],
+            allow_headers=["Authorization", "Content-Type"],
+            allow_credentials=False,
+        )
 
     @application.middleware("http")
     async def add_request_id(request: Request, call_next):

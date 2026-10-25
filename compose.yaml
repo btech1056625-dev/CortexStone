@@ -21,6 +21,18 @@ services:
       retries: 10
       start_period: 5s
 
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cortexstone}:${POSTGRES_PASSWORD:?Copy .env.example to .env and set POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-cortexstone}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build:
       context: .
@@ -34,11 +46,14 @@ services:
       CORTEXSTONE_AUTH_ISSUER: ${CORTEXSTONE_AUTH_ISSUER:-}
       CORTEXSTONE_AUTH_AUDIENCE: ${CORTEXSTONE_AUTH_AUDIENCE:-}
       CORTEXSTONE_AUTH_JWKS_URL: ${CORTEXSTONE_AUTH_JWKS_URL:-}
+      CORTEXSTONE_CORS_ORIGINS: ${CORTEXSTONE_CORS_ORIGINS:-}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
