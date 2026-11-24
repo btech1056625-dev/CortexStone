@@ -13,6 +13,7 @@ Invariants:
 """
 
 from cortexstone.memory.schemas import MemoryItemRead, MemorySearchResult
+from cortexstone.security.redaction import redact_secrets
 
 DEFAULT_MAX_TITLE_CHARS: int = 255
 DEFAULT_MAX_CONTENT_CHARS: int = 4000
@@ -44,7 +45,7 @@ def _sanitize_and_bound_title(title: str | None, max_chars: int = DEFAULT_MAX_TI
     """Sanitize, bound, and escape an untrusted memory title."""
     if not title:
         return ""
-    clean = title.strip()
+    clean = redact_secrets(title.strip())
     if len(clean) > max_chars:
         clean = clean[: max_chars - 3] + "..."
     return _escape_untrusted_text(clean)
@@ -58,7 +59,7 @@ def _sanitize_and_bound_content(
     Ensures content length is bounded, XML characters are escaped, and lines
     are stripped of trailing whitespace while preserving internal structure.
     """
-    clean = content.strip()
+    clean = redact_secrets(content.strip())
     if len(clean) > max_chars:
         clean = clean[:max_chars] + "\n... [content truncated]"
     escaped = _escape_untrusted_text(clean)
@@ -72,8 +73,8 @@ def format_memory_item_citation(item: MemoryItemRead) -> str:
         `[Source: github:issue#101, 2026-10-12 14:30:00Z | Conf: 0.90]`
     """
     prov = item.provenance
-    src_type = _escape_untrusted_text(prov.source_type or "system")
-    src_ref = _escape_untrusted_text(prov.source_ref or item.id.hex[:8])
+    src_type = _escape_untrusted_text(redact_secrets(prov.source_type or "system"))
+    src_ref = _escape_untrusted_text(redact_secrets(prov.source_ref or item.id.hex[:8]))
 
     # Timestamp preference: occurred_at (real-world event time) > created_at
     ts = item.occurred_at or item.created_at

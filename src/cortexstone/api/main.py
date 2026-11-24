@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,9 @@ from cortexstone.agent.models.split import SplitModelClient
 from cortexstone.api.auth import OIDCAuthenticator
 from cortexstone.api.config import Settings
 from cortexstone.api.dependencies import build_policy_engine
+from cortexstone.api.v1.approvals import router as approvals_router
 from cortexstone.api.v1.chat import router as chat_router
+from cortexstone.api.v1.github import router as github_router
 from cortexstone.api.v1.memories import router as memory_router
 from cortexstone.api.v1.permissions import router as permissions_router
 from cortexstone.api.v1.router import operational_router
@@ -26,13 +29,19 @@ from cortexstone.api.v1.router import router as v1_router
 from cortexstone.db.session import create_engine_from_url, create_session_factory
 from cortexstone.memory.embeddings.bge import BGEEmbeddingProvider
 from cortexstone.memory.embeddings.config import EmbeddingError
+from cortexstone.security.action_runs.service import SqlAlchemyActionRunService
+from cortexstone.security.approvals.service import SqlAlchemyApprovalService
 from cortexstone.security.permissions.service import SqlAlchemyPermissionService
+from cortexstone.security.redaction import configure_redacting_logging
+from cortexstone.tools.connectors.github import GITHUB_ISSUE_READ_TOOL, GitHubIssueReader
+from cortexstone.tools.runner import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create the API with validated settings and application-scoped services."""
+    configure_redacting_logging()
     configured_settings = settings or Settings.from_environment()
 
     engine: AsyncEngine | None = None
@@ -53,11 +62,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             jwks_url=configured_settings.auth_jwks_url,
         )
 
+    github_http_client: httpx.AsyncClient | None = None
+    github_issue_reader: GitHubIssueReader | None = None
+    tool_executors: dict[str, ToolExecutor] = {}
+    if (
+        configured_settings.github_token is not None
+        and configured_settings.github_issue_read_allowed_targets
+    ):
+        github_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0, connect=3.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            follow_redirects=False,
+        )
+        github_issue_reader = GitHubIssueReader(
+            token=configured_settings.github_token,
+            allowed_repositories=configured_settings.github_issue_read_allowed_targets,
+            client=github_http_client,
+        )
+        tool_executors[GITHUB_ISSUE_READ_TOOL] = github_issue_reader
+
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         try:
             yield
         finally:
+            if github_http_client is not None:
+                await github_http_client.aclose()
             if engine is not None:
                 await engine.dispose()
 
@@ -74,6 +104,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.db_engine = engine
     application.state.db_session_factory = session_factory
     application.state.authenticator = authenticator
+    application.state.github_http_client = github_http_client
+    application.state.github_issue_reader = github_issue_reader
+    application.state.tool_executors = tool_executors
     application.state.memory_embedding_provider = BGEEmbeddingProvider()
     application.state.model_client = (
         SplitModelClient(
@@ -90,9 +123,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     permission_service = (
         SqlAlchemyPermissionService(session_factory) if session_factory is not None else None
     )
+    approval_service = (
+        SqlAlchemyApprovalService(session_factory) if session_factory is not None else None
+    )
+    action_run_service = (
+        SqlAlchemyActionRunService(session_factory) if session_factory is not None else None
+    )
     application.state.permission_service = permission_service
+    application.state.approval_service = approval_service
+    application.state.action_run_service = action_run_service
     application.state.policy_engine = build_policy_engine(
         configured_settings.notes_search_allowed_targets,
+        github_issue_read_allowed_targets=(
+            configured_settings.github_issue_read_allowed_targets
+        ),
+        github_enabled=configured_settings.github_token is not None,
         async_permission_service=permission_service,
     )
 
@@ -117,7 +162,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(v1_router, prefix="/api/v1")
     application.include_router(chat_router, prefix="/api/v1")
     application.include_router(memory_router, prefix="/api/v1")
+    application.include_router(github_router, prefix="/api/v1")
     application.include_router(permissions_router, prefix="/api/v1")
+    application.include_router(approvals_router, prefix="/api/v1")
 
     @application.exception_handler(StarletteHTTPException)
     async def handle_http_error(
@@ -128,6 +175,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             404: "not_found",
             401: "unauthorized",
             403: "forbidden",
+            409: "conflict",
             502: "invalid_model_response",
             422: "invalid_request",
             503: "service_unavailable",

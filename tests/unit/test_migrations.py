@@ -55,12 +55,22 @@ def test_offline_upgrade_sql_generation(alembic_cfg: Config, capsys) -> None:
     assert "USING hnsw (embedding vector_cosine_ops)" in sql_text
     assert "WITH (m = 16, ef_construction = 64)" in sql_text
     assert "WHERE deleted_at IS NULL AND embedding IS NOT NULL" in sql_text
+    assert "CREATE TABLE approvals" in sql_text
+    assert "action_hash" in sql_text
+    assert "action_data JSONB NOT NULL" in sql_text
+    assert "status IN ('pending', 'approved', 'rejected', 'expired', 'revoked')" in sql_text
+    assert "CREATE TABLE action_runs" in sql_text
+    assert "action_id" in sql_text
+    assert (
+        "status IN ('pending', 'awaiting_approval', 'denied', 'running', "
+        "'succeeded', 'failed', 'cancelled')"
+    ) in sql_text
 
 
 def test_offline_downgrade_sql_generation(alembic_cfg: Config, capsys) -> None:
     """Verify offline downgrade emits DROP INDEX and DROP TABLE memory_items."""
     # Execute offline downgrade generation
-    downgrade(alembic_cfg, "0001:base", sql=True)
+    downgrade(alembic_cfg, "0004:base", sql=True)
     captured = capsys.readouterr()
     sql_text = captured.out
 
@@ -70,3 +80,5 @@ def test_offline_downgrade_sql_generation(alembic_cfg: Config, capsys) -> None:
     assert "DROP INDEX ix_memory_items_deleted_at;" in sql_text
     assert "DROP INDEX ix_memory_items_owner_id;" in sql_text
     assert "DROP TABLE memory_items;" in sql_text
+    assert "DROP TABLE approvals;" in sql_text
+    assert "DROP TABLE action_runs;" in sql_text

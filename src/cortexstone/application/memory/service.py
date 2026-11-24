@@ -36,6 +36,7 @@ from cortexstone.memory.schemas import (
     SensitivityLevel,
 )
 from cortexstone.security.audit.service import AuditEvent, AuditLoggerInterface
+from cortexstone.security.redaction import redact_secrets, redact_value
 
 
 class DeletionReceipt(BaseModel):
@@ -110,6 +111,7 @@ class MemoryService:
         if not owner_id or not owner_id.strip():
             raise ValueError("owner_id must be a non-empty string.")
 
+        item = MemoryItemCreate.model_validate(redact_value(item.model_dump()))
         embedding: list[float] | None = None
         if self._embedding_provider is not None:
             embedding = await self._embedding_provider.embed_document(item.content)
@@ -239,6 +241,9 @@ class MemoryService:
         if not owner_id or not owner_id.strip() or not memory_id:
             return None
 
+        update_data = MemoryItemUpdate.model_validate(
+            redact_value(update_data.model_dump(exclude_unset=True))
+        )
         embedding: list[float] | None = None
         if self._embedding_provider is not None and update_data.content is not None:
             embedding = await self._embedding_provider.embed_document(update_data.content)
@@ -476,10 +481,10 @@ class MemoryService:
         clean_owner = owner_id.strip()
 
         if isinstance(query, RetrievalRequest):
-            request = query
+            request = query.model_copy(update={"query": redact_secrets(query.query)})
         else:
             request = RetrievalRequest(
-                query=query,
+                query=redact_secrets(query),
                 top_k=top_k,
                 kind=kind,
                 sensitivity=sensitivity,

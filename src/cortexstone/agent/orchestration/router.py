@@ -22,6 +22,7 @@ from cortexstone.agent.schemas.routing import (
     IntentCategory,
     RouteDecision,
 )
+from cortexstone.security.redaction import redact_secrets
 
 logger = logging.getLogger("cortexstone.agent.orchestration.router")
 
@@ -43,6 +44,7 @@ class IntentRouter:
         """
         Analyze a user query using the configured routing model.
         """
+        user_message = redact_secrets(user_message)
         if not user_message or not user_message.strip():
             return RouteDecision(
                 intent=IntentCategory.CLARIFICATION,

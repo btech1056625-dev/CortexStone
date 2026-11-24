@@ -7,6 +7,7 @@ from cortexstone.application.memory.service import MemoryService
 from cortexstone.memory.retrieval.formatter import format_memory_context
 from cortexstone.memory.schemas import MemoryKind, SensitivityLevel
 from cortexstone.security.policy import PolicyPrincipal
+from cortexstone.security.redaction import redact_secrets
 
 MAX_MEMORY_RESULTS = 5
 MAX_MEMORY_CONTEXT_CHARS = 12_000
@@ -48,9 +49,10 @@ class ChatService:
         if not principal.authenticated:
             raise PermissionError("Chat requires an authenticated principal.")
 
+        safe_message = redact_secrets(turn.message)
         retrieval = await self._memory_service.search_memories(
             owner_id=principal.principal_id,
-            query=turn.message,
+            query=safe_message,
             top_k=MAX_MEMORY_RESULTS,
             sensitivity=SensitivityLevel.NORMAL,
         )
@@ -73,12 +75,12 @@ class ChatService:
             max_context_chars=MAX_MEMORY_CONTEXT_CHARS,
         )
         response = await self._agent.generate_chat_response(
-            user_message=turn.message,
+            user_message=safe_message,
             messages=[
                 ModelMessage(role=Role.SYSTEM, content=CHAT_SYSTEM_PROMPT),
                 ModelMessage(
                     role=Role.USER,
-                    content=f"User message:\n{turn.message}\n\n{memory_context}",
+                    content=f"User message:\n{safe_message}\n\n{memory_context}",
                 ),
             ],
             schema=ChatResult,

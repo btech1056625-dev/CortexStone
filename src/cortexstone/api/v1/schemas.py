@@ -1,11 +1,12 @@
 """Validated HTTP request and response schemas for the version 1 API."""
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from cortexstone.agent.schemas.actions import ProposedAction
 from cortexstone.memory.schemas import MemoryItemCreate, MemoryItemRead, MemoryKind
+from cortexstone.security.approvals.service import ApprovalRecord, ApprovalStatus
 from cortexstone.security.permissions.service import PermissionGrantRecord
 from cortexstone.security.policy import (
     ActionScope,
@@ -211,3 +212,49 @@ class PrincipalRevocationResponse(BaseModel):
 
     principal_id: str
     revoked_count: int
+
+
+class ApprovalCreateRequest(BaseModel):
+    """Action that requires the authenticated owner to approve before execution."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    action: ProposedAction
+
+
+class ApprovalDecisionRequest(BaseModel):
+    """Owner's explicit approval or rejection decision."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision: Literal["approved", "rejected"]
+
+
+class ApprovalResponse(BaseModel):
+    """Persisted approval details visible only to the owning principal."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    owner_id: str
+    action: ProposedAction
+    action_hash: str
+    status: ApprovalStatus
+    expires_at: AwareDatetime
+    created_at: AwareDatetime
+    decided_at: AwareDatetime | None
+    decided_by: str | None
+
+    @classmethod
+    def from_record(cls, record: ApprovalRecord) -> "ApprovalResponse":
+        return cls(
+            id=str(record.id),
+            owner_id=record.owner_id,
+            action=record.action,
+            action_hash=record.action_hash,
+            status=record.status,
+            expires_at=record.expires_at,
+            created_at=record.created_at,
+            decided_at=record.decided_at,
+            decided_by=record.decided_by,
+        )

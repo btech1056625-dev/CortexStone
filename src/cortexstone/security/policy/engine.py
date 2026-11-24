@@ -419,9 +419,11 @@ class PolicyEngine:
 
     @staticmethod
     def canonical_action_representation(action: ProposedAction) -> str:
-        """Deterministic JSON representation of tool, target, and arguments."""
+        """Deterministic JSON representation of the approved action effect."""
         canonical_action = {
             "arguments": action.arguments,
+            "idempotency_key": action.idempotency_key,
+            "purpose": action.purpose,
             "target_ref": action.target_ref,
             "tool_name": action.tool_name,
         }
@@ -435,7 +437,7 @@ class PolicyEngine:
 
     @classmethod
     def action_hash(cls, action: ProposedAction) -> str:
-        """Hash tool, exact target, and canonical arguments for approval binding."""
+        """Hash the exact action effect and purpose for approval binding."""
         encoded = cls.canonical_action_representation(action).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
 

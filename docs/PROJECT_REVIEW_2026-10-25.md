@@ -3,7 +3,7 @@
 **Review updated:** 25 October 2026
 **Documentation refresh:** 24 November 2026
 **Model-provider update:** Routing uses Groq and reasoning uses Google AI Studio. The Nebius and NVIDIA records below describe the original project/hackathon baseline and have not been removed as historical requirements.
-**Acceptance update:** Local PostgreSQL + BGE memory lifecycle acceptance passed on 24 November 2026; live chat-model API calls remain unverified because local provider keys are placeholders.
+**Acceptance update:** Local PostgreSQL + BGE memory lifecycle and signed bearer-token HTTP acceptance for memory/chat passed on 24 November 2026; live chat-model API calls remain unverified because local provider keys are placeholders.
 **Review baseline:** The 24 October 2026 review, updated for PR #22 and current `main`
 **Review scope:** Current repository implementation compared with `Documentations/Cortexstone_PRD.md`, `Documentations/Cortexstone_Architecture_HLD_LLD.md`, the agent and design rules, and the current integration specifications.
 
@@ -13,22 +13,22 @@ Cortexstone has an authenticated memory-and-chat backend slice and an API-connec
 
 The implementation follows the **intended architecture direction** well: a modular monolith, replaceable model adapters, typed action proposals, fail-closed authorization, explicit owner-scoped memory operations, and separation between policy decisions and tool execution. The current stage is an **integrated backend vertical slice with a connected dashboard, not the completed MVP described in the PRD**. No live PostgreSQL/OIDC/model deployment or deployment rehearsal has been documented.
 
-Important remaining work includes authenticated HTTP acceptance of memory/chat, live Groq and Google inference, dashboard checks in CI, durable approval state and integrated action audit, registered production connector executors, verified action outcomes, durable jobs and scheduling, Telegram, Guardian scanning, and deployment. Database-backed permission grants and revocation are now implemented and were verified against an isolated PostgreSQL instance; they are administrator-managed rather than synchronized with IdP roles. Authentication is implemented with configured OIDC and remains fail-closed when unavailable; the project owner reports OIDC was verified earlier, while this memory acceptance run did not exercise a live bearer token. The dashboard currently requires a valid token to be pasted into Settings. PostgreSQL migration and memory lifecycle plus real local BGE embeddings/retrieval were exercised on 24 November 2026.
+Important remaining work includes live external OIDC/provider/deployment validation, live Groq and Google inference, dashboard checks in CI, registered production connector executors, verified action outcomes, durable jobs and scheduling, Telegram, Guardian scanning, and deployment. Database-backed permission grants, owner-scoped durable approvals, and action-run lifecycle/audit are implemented; permission administration remains operator-managed rather than synchronized with IdP roles. Permission and action-run persistence were rehearsed against isolated PostgreSQL. Authentication is implemented with configured OIDC and remains fail-closed when unavailable; signed RS256 bearer-token HTTP acceptance now covers memory/chat routes locally. The dashboard currently requires a valid token to be pasted into Settings. PostgreSQL migration and memory lifecycle plus real local BGE embeddings/retrieval were exercised on 24 November 2026.
 
 ## Implementation status at a glance
 
 | Area | Current state | Assessment against plan |
 |---|---|---|
 | Repository and local development | Python package, Dockerfile, Docker Compose API/PostgreSQL, environment example, migration and development guides | Local backend development path present; no production deployment |
-| API | FastAPI health/readiness, request IDs/error envelope, authenticated `/api/v1/me`, `/api/v1/chat`, owner-scoped memory create/list/read/forget, action validation | Main memory/chat API path implemented; authentication needs configured external OIDC, and chat/model/database live integration remains unverified |
+| API | FastAPI health/readiness, request IDs/error envelope, authenticated `/api/v1/me`, `/api/v1/chat`, owner-scoped memory create/list/read/forget, action validation | Main memory/chat API path and bearer-token HTTP coverage are implemented; live external OIDC and provider/database deployment integration remain unverified |
 | Authentication and identity | RS256 OIDC validation against configured issuer, audience, and JWKS; verified subject scopes memory and chat | Implemented and tested; fails closed with 503 when unconfigured/provider unavailable and 401 for missing/invalid bearer credentials |
 | Model layer | Provider-neutral client, mock client, Groq router and Google AI Studio reasoner adapters, bounded structured response parsing | Groq routing and Google AI Studio reasoning are configured behind separate API keys; live endpoints, credentials, quotas, and model behavior are not demonstrated |
 | Agent orchestration | Intent router, bounded planner, and structured response invocation used by chat application service | Chat structured generation is integrated; full router-to-policy-to-execution lifecycle is not integrated into chat |
-| Memory domain and persistence | Schemas, SQLAlchemy model/repository/service, owner-scoped API routes, request-scoped sessions and transaction handling | Local Compose PostgreSQL reached Alembic `0001`; create/list/read across fresh sessions, cross-owner isolation, and committed forget exclusion passed. Authenticated HTTP was not exercised in this run |
-| Memory retrieval | BGE-small 384-dimensional provider, vector persistence/search code, bounded ranking, provenance formatter and offline evaluation | Real local BGE document/query embeddings and PostgreSQL retrieval passed for a synthetic acceptance fact; the fixed 20-question quality target and representative-source provenance remain unverified |
-| Security policy | Server-defined tool policy, target allowlists, PostgreSQL-backed principal grants, uncached revocation checks, canonical action hash, approval evidence checks | Permission administration and policy lookup implemented; durable approvals and policy-authorized production execution remain missing |
-| Tool execution | `ToolRunner` checks current policy and grants before dispatch | Boundary exists; no production executors/connectors, outcome verification, or integrated action audit trail |
-| Database and migrations | PostgreSQL/pgvector Compose service, async SQLAlchemy engine/session, Alembic `0001` migration with vector extension, table and indexes | Local Compose database healthy; Alembic `0001` is at head and real persistence was exercised. Readiness checks connectivity, not migration state |
+| Memory domain and persistence | Schemas, SQLAlchemy model/repository/service, owner-scoped API routes, request-scoped sessions and transaction handling | Disposable PostgreSQL/pgvector acceptance verified migrations and authenticated HTTP create/list/read, cross-owner isolation, chat recall, and forget using a test-issued RS256 token. Live IdP token acceptance remains pending |
+| Memory retrieval | BGE-small 384-dimensional provider, vector persistence/search code, bounded ranking, provenance formatter and offline evaluation | Local BGE/PostgreSQL retrieval passed for a synthetic fact; the deterministic offline 20-question benchmark passed 20/20, but production BGE benchmark quality and representative connector-source provenance remain unverified |
+| Security policy | Server-defined tool policy, target allowlists, PostgreSQL-backed principal grants and approvals, uncached pre-dispatch grant/approval checks, canonical action hash | Permission management, durable approvals, and action-run lifecycle/audit are implemented; production execution remains unconnected |
+| Tool execution | `ToolRunner` requires a durable run recorder, checks policy/grants, and persists state around executor dispatch | No production executors/connectors or independent outcome verification; lifecycle audit metadata is redacted and tested |
+| Database and migrations | PostgreSQL/pgvector Compose service, async SQLAlchemy engine/session, Alembic `0001`–`0004` migrations | Disposable PostgreSQL passed migration application and action-run/approval persistence rehearsal; readiness checks database connectivity and packaged migration heads |
 | Durable jobs and scheduler | Directory contracts and architecture plan | Not implemented |
 | Guardian | Directory contracts and architecture plan | Not implemented |
 | Dashboard | React/Vite workbench; live health, identity, chat, policy-validation, and memory integration; explicit demo mode | Implemented for currently registered APIs; no browser sign-in, and GitHub/Calendar/Notes/Jobs/Guardian remain unavailable because backend routes are absent |
@@ -47,7 +47,7 @@ Important remaining work includes authenticated HTTP acceptance of memory/chat, 
 - `src/cortexstone/api/main.py` builds the FastAPI app, generates request IDs, mounts operational and versioned routes, and formats errors into a shared response envelope.
 - `src/cortexstone/api/v1/router.py` exposes liveness/readiness and versioned health endpoints, `/api/v1/me`, and action proposal validation.
 - `src/cortexstone/api/v1/memories.py` exposes the contract-limited owner-scoped create/list/read/forget routes. `src/cortexstone/api/v1/chat.py` exposes authenticated chat.
-- `/ready` checks connectivity to PostgreSQL. It does not verify migration state or model-provider availability.
+- `/ready` checks PostgreSQL connectivity and Alembic migration heads. Model-provider readiness is checked at the chat feature boundary, not as a global API dependency.
 - `docs/DEVELOPMENT.md` describes local startup and API conventions.
 
 ### 2. Dashboard integration
@@ -93,7 +93,7 @@ The memory feature is wired end to end in code but has not yet been verified aga
 - `ToolRunner` re-evaluates policy immediately before dispatch and only calls a registered executor after an `ALLOW` result.
 - The policy engine and runner have focused unit/security tests.
 
-The security flow remains incomplete for the PRD: token verification relies on an externally configured OIDC issuer; there is no IdP role synchronization, persistent approval service/UI, registered production tools, general action-attempt/outcome audit trail, or result-verification service. Permission policies currently register only the configured `notes.search` scope, and no Notes connector executor is registered.
+The security flow remains incomplete for the PRD: token verification relies on an externally configured OIDC issuer; there is no IdP role synchronization, registered production tools, interrupted-run recovery, or result-verification service. Permission policies currently register only the configured `notes.search` scope, and no Notes connector executor is registered.
 
 ### 6. Tests and CI
 
@@ -142,10 +142,10 @@ The implementation now covers a backend vertical slice of **Remember**, authenti
 
 Specifically, these P0 PRD requirements remain unproven or unimplemented:
 
-- M1–M4: a local synthetic acceptance now verifies persistence across fresh sessions and committed forget exclusion; the fixed 20-question semantic/temporal quality target, representative real-source provenance, and authenticated HTTP acceptance remain outstanding.
+- M1–M4: authenticated HTTP acceptance against disposable PostgreSQL verifies memory create/list/read/forget, cross-owner isolation, and chat retrieval with a mock model. The offline lexical 20-question benchmark passed 20/20; production BGE quality and representative connector-source provenance remain outstanding.
 - A1–A7: Telegram morning brief, durable scheduler/worker, durable job state, retries/idempotency, approval workflow, and user-visible statuses.
 - G1: connected-repository secret scanning with redaction.
-- T1–T8: persisted permission grants/revocation are implemented; durable approvals, sandbox boundary, general integrated action audit, prompt-injection handling across all orchestration paths, and verified connector outcomes remain incomplete. OIDC token authentication is implemented, but the external provider's live setup is not validated.
+- T1–T8: persisted permission grants/revocation, approval requests/decisions, and action-run lifecycle/redacted audit are implemented; sandbox boundary, prompt-injection handling across all orchestration paths, and verified connector outcomes remain incomplete. OIDC token authentication is implemented, but the external provider's live setup is not validated.
 - Nebius deployment using an eligible NVIDIA model.
 - Dashboard typecheck, frontend tests, and production build added to CI, followed by browser acceptance against the deployed API.
 
@@ -155,11 +155,11 @@ Some planned deliverables are explicitly staged or blocked on decisions (especia
 
 ### P0 — Validate and harden the implemented backend slice
 
-1. Run Alembic against a real PostgreSQL/pgvector database, verify the migration and downgrade strategy, then exercise authenticated memory create/list/read/forget and chat retrieval end to end.
+1. Use a bearer token actually issued by the configured OIDC provider against protected memory/chat HTTP routes; the disposable database acceptance used a locally signed test token.
 2. Configure live OIDC, Groq, and Google AI Studio credentials in a controlled environment; validate provider availability, model IDs, quotas, structured response behavior, and operational error reporting.
 3. Verify BGE retrieval behavior and quality using representative user data, confirm owner/sensitivity/deletion filters at the database boundary, and document model download/cache behavior.
-4. Decide whether conversational history should remain correlation-ID-only or be persisted and owner-scoped; current API does not load/store previous turns.
-5. Add durable approval management and general action-attempt/outcome audit; keep action proposals non-executable until the complete authorization and execution path is implemented and tested.
+4. Conversation history remains non-persistent for this MVP; `conversation_id` is an opaque correlation value and is echoed without storing turns.
+5. Register a least-privilege production executor, wire persisted approval and action-run services into its execution path, and independently verify outcomes; keep action proposals non-executable until the complete path is implemented and tested.
 6. Add at least one allowlisted connector end to end through `ToolRunner`, with independent outcome verification and redacted audit records.
 7. Implement secret redaction before memory/model/log persistence and validate it with seeded secrets.
 
@@ -180,6 +180,6 @@ Some planned deliverables are explicitly staged or blocked on decisions (especia
 
 **Architecture alignment: good.** The code largely respects the modular-monolith direction and the critical rule that the backend—not the model—decides whether an action may run.
 
-**Current stage: integrated backend vertical slice plus an API-connected dashboard; MVP remains partial.** Authenticated memory create/list/read/forget, PostgreSQL/pgvector migration wiring, BGE embedding persistence/retrieval, bounded chat, policy validation, persistent permission grants/revocation, and the dashboard client for registered API routes are implemented. The next Protect work is durable approvals, broader audit coverage, and a production connector with verified outcomes. Jobs, Telegram, Guardian scanning, production connector routes, and deployment remain future work.
+**Current stage: integrated backend vertical slice plus an API-connected dashboard; MVP remains partial.** Authenticated memory create/list/read/forget, PostgreSQL/pgvector migration wiring, BGE embedding persistence/retrieval, bounded chat, policy validation, persistent permission grants/revocation, durable owner-scoped approval requests/decisions, redacted action-run lifecycle audit, and the dashboard client for registered API routes are implemented. Next, connect a production connector with verified outcomes. Jobs, Telegram, Guardian scanning, production connector routes, and deployment remain future work.
 
-**Review validation update (24 November 2026):** Compose configuration is valid; local PostgreSQL and API reached healthy state; the memory acceptance used Alembic `0001`. A separate isolated PostgreSQL check applied `0001`–`0002`, verified exact grant persistence and idempotency, confirmed a policy denial immediately after principal-wide revocation, and observed both grant/revocation audit events. A real BGE embedding and PostgreSQL service-level memory acceptance verified create/list/read across sessions, cross-owner isolation, semantic retrieval, and forget exclusion after commit. The provider API keys in `.env` are placeholders, so Groq/Google live inference was not attempted. The memory acceptance did not make an authenticated HTTP request or exercise deployed infrastructure.
+**Review validation update (24 November 2026):** A disposable PostgreSQL/pgvector database passed Alembic upgrade, downgrade to base, repeat upgrade, and final head `0002`. Authenticated HTTP acceptance with a locally generated RS256 test token passed memory create/list/read/forget, cross-owner isolation, and chat retrieval through the database using a mock model. Migration-aware readiness returned 503 before migrations, 200 at head, 503 after downgrade, and 200 after re-upgrade. The deterministic offline 20-question benchmark passed 20/20. Configured OIDC discovery and JWKS endpoints returned valid metadata and matched the configured issuer/key URL; unit tests cover claims, expiry, key rotation, and provider failures. A real BGE embedding and PostgreSQL service-level memory acceptance was previously verified for a synthetic fact. The provider API keys in `.env` are placeholders, no actual user token from the configured IdP was available, and live Groq/Google inference was not attempted. Production BGE benchmark quality, external IdP token acceptance, and hosted deployment remain unverified.

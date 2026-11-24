@@ -9,9 +9,10 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from cortexstone.db.base import utc_now
+from cortexstone.security.redaction import redact_secrets, redact_value
 
 
 class AuditEvent(BaseModel):
@@ -46,6 +47,16 @@ class AuditEvent(BaseModel):
         default_factory=dict,
         description="Content-free metadata (e.g. kind, reason code, verification status).",
     )
+
+    @field_validator("event_type", "owner_id", "status", mode="before")
+    @classmethod
+    def redact_text_fields(cls, value: str) -> str:
+        return redact_secrets(value)
+
+    @field_validator("details", mode="before")
+    @classmethod
+    def redact_details(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return redact_value(value)
 
 
 class AuditLoggerInterface(ABC):

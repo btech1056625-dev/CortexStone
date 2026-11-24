@@ -1,5 +1,6 @@
 import logging
 from typing import Any
+from xml.sax.saxutils import escape
 
 from cortexstone.agent.models.interface import (
     ModelClient,
@@ -10,8 +11,10 @@ from cortexstone.agent.models.interface import (
     T,
 )
 from cortexstone.agent.orchestration.router import IntentRouter
+from cortexstone.agent.prompts.templates import REASONER_SYSTEM_PROMPT_V1
 from cortexstone.agent.schemas.actions import AgentPlan, ProposedAction
 from cortexstone.agent.schemas.routing import IntentCategory, RouteDecision
+from cortexstone.security.redaction import redact_secrets
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +46,17 @@ class AgentOrchestrator:
         timeout: float = 30.0,
     ) -> ModelResponse[T]:
         """Invoke the selected agent model and return its schema-validated response."""
+        safe_messages = [
+            ModelMessage(
+                role=message.role,
+                content=redact_secrets(message.content),
+                name=redact_secrets(message.name) if message.name is not None else None,
+            )
+            for message in messages
+        ]
         return await self.model_client.generate_for_role(
             role=role,
-            messages=messages,
+            messages=safe_messages,
             schema=schema,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -134,18 +145,26 @@ class AgentOrchestrator:
         return []
 
     def _build_messages(self, prompt: str, context: list[dict[str, Any]]) -> list[ModelMessage]:
-
-        formatted_ctx = []
+        context_items = []
         for c in context:
             ref = c.get("source_ref", "unknown")
             text = c.get("content", "")
-            formatted_ctx.append(f"[{ref}]: {text}")
+            context_items.append(
+                "<item>\n"
+                f"<source_ref>{escape(str(ref))}</source_ref>\n"
+                f"<content>{escape(str(text))}</content>\n"
+                "</item>"
+            )
 
-        ctx_str = "\n".join(formatted_ctx) if formatted_ctx else "No context."
+        external_context = "\n".join(context_items) or "No external context provided."
+        prompt_payload = (
+            "<agent_input>\n"
+            f"<external_context>\n{external_context}\n</external_context>\n"
+            f"<user_task>{escape(prompt)}</user_task>\n"
+            "</agent_input>"
+        )
 
         return [
-            ModelMessage(
-                role=Role.SYSTEM, content="You are Cortexstone. Produce a bounded AgentPlan."
-            ),
-            ModelMessage(role=Role.USER, content=f"Context:\n{ctx_str}\n\nTask: {prompt}"),
+            ModelMessage(role=Role.SYSTEM, content=REASONER_SYSTEM_PROMPT_V1),
+            ModelMessage(role=Role.USER, content=prompt_payload),
         ]

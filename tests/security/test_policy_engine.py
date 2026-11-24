@@ -18,11 +18,13 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
 from cortexstone.agent.schemas.actions import ProposedAction
+from cortexstone.security.action_runs import ActionRunStatus
 from cortexstone.security.policy import (
     ActionScope,
     ApprovalEvidence,
@@ -608,9 +610,25 @@ def test_denied_actions_cannot_reach_execution_path_through_runner(
     """When PolicyEngine returns DENY or REQUIRE_APPROVAL, ToolRunner never calls the executor."""
     executor_mock = AsyncMock(return_value={"executed": True})
 
+    class RunRecorder:
+        async def create_attempt(self, _principal_id, _action):
+            return uuid4()
+
+        async def transition(
+            self,
+            _run_id,
+            _status: ActionRunStatus,
+            *,
+            policy_reason=None,
+            failure_code=None,
+            approval_accepted=False,
+        ):
+            return None
+
     runner = ToolRunner(
         policy_engine=policy_engine,
         executors={"notes.create": executor_mock, "notes.search": executor_mock},
+        run_recorder=RunRecorder(),
     )
 
     # 1. Denied action: unknown tool

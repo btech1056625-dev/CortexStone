@@ -19,6 +19,8 @@ from uuid import UUID
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
+from cortexstone.security.redaction import redact_secrets, redact_value
+
 
 def utc_now() -> datetime:
     """Return timezone-aware current UTC datetime."""
@@ -99,10 +101,20 @@ class MemoryItemBase(BaseModel):
     @field_validator("content")
     @classmethod
     def validate_content_non_empty(cls, v: str) -> str:
-        trimmed = v.strip()
+        trimmed = redact_secrets(v.strip())
         if not trimmed:
             raise ValueError("Memory content must not be blank or whitespace-only.")
         return trimmed
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def redact_title(cls, v: str | None) -> str | None:
+        return redact_secrets(v) if isinstance(v, str) else v
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def redact_metadata(cls, v: Any) -> Any:
+        return redact_value(v)
 
     @field_validator("occurred_at")
     @classmethod
@@ -133,6 +145,11 @@ class MemoryItemCreate(MemoryItemBase):
         description="True if derived by model inference; False if explicitly user-stated.",
     )
 
+    @field_validator("source_type", "source_ref", mode="before")
+    @classmethod
+    def redact_provenance(cls, v: str | None) -> str | None:
+        return redact_secrets(v) if isinstance(v, str) else v
+
 
 class MemoryItemUpdate(BaseModel):
     """Payload for modifying an existing memory record."""
@@ -154,11 +171,21 @@ class MemoryItemUpdate(BaseModel):
     @classmethod
     def validate_content_non_empty(cls, v: str | None) -> str | None:
         if v is not None:
-            trimmed = v.strip()
+            trimmed = redact_secrets(v.strip())
             if not trimmed:
                 raise ValueError("Updated content must not be blank or whitespace-only.")
             return trimmed
         return v
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def redact_title(cls, v: str | None) -> str | None:
+        return redact_secrets(v) if isinstance(v, str) else v
+
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def redact_metadata(cls, v: Any) -> Any:
+        return redact_value(v)
 
     @field_validator("occurred_at")
     @classmethod
@@ -182,6 +209,11 @@ class MemoryItemRead(MemoryItemBase):
     deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("source_type", "source_ref", mode="before")
+    @classmethod
+    def redact_provenance(cls, v: str | None) -> str | None:
+        return redact_secrets(v) if isinstance(v, str) else v
 
     @property
     def is_active(self) -> bool:

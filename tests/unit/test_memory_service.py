@@ -368,6 +368,38 @@ async def test_create_memory_with_embedding_provider_auto_embeds():
 
 
 @pytest.mark.anyio
+async def test_create_and_update_redact_before_embedding_or_persistence():
+    mock_repo = AsyncMock(spec=MemoryRepositoryInterface)
+    mock_repo.create.return_value = create_fake_model(owner_id="user_embed")
+    mock_repo.update.return_value = create_fake_model(
+        owner_id="user_embed",
+        content="Updated api_key=[REDACTED]",
+    )
+    mock_provider = AsyncMock(spec=EmbeddingProvider)
+    mock_provider.embed_document.return_value = [0.1] * 384
+    service = MemoryService(repository=mock_repo, embedding_provider=mock_provider)
+
+    created = MemoryItemCreate(
+        kind=MemoryKind.FACT,
+        content="api_key=fake-create-secret",
+        metadata={"access_token": "fake-metadata-secret"},
+    )
+    await service.create_memory(owner_id="user_embed", item=created)
+    create_args = mock_repo.create.await_args.kwargs
+    assert create_args["item"].content == "api_key=[REDACTED]"
+    assert create_args["item"].metadata["access_token"] == "[REDACTED]"
+    assert mock_provider.embed_document.await_args_list[0].args[0] == "api_key=[REDACTED]"
+
+    updated = MemoryItemUpdate(content="Updated api_key=fake-update-secret")
+    await service.update_memory(owner_id="user_embed", memory_id=uuid4(), update_data=updated)
+    update_args = mock_repo.update.await_args.kwargs
+    assert update_args["update_data"].content == "Updated api_key=[REDACTED]"
+    assert mock_provider.embed_document.await_args_list[1].args[0] == (
+        "Updated api_key=[REDACTED]"
+    )
+
+
+@pytest.mark.anyio
 async def test_update_memory_refreshes_embedding_on_content_change():
     """Verify update_memory re-computes embedding when content is modified."""
     mock_repo = AsyncMock(spec=MemoryRepositoryInterface)

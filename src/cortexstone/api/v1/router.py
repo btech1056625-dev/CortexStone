@@ -1,8 +1,10 @@
 """Version 1 and operational health routes."""
 
 import logging
+from pathlib import Path
 from typing import Annotated
 
+from alembic.script import ScriptDirectory
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -21,6 +23,9 @@ from cortexstone.api.v1.schemas import (
 from cortexstone.security.policy import PolicyEngine, PolicyPrincipal
 
 logger = logging.getLogger(__name__)
+
+MIGRATION_DIRECTORY = Path(__file__).resolve().parents[2] / "db" / "migrations"
+MIGRATION_HEADS = frozenset(ScriptDirectory(str(MIGRATION_DIRECTORY)).get_heads())
 
 router = APIRouter()
 operational_router = APIRouter(tags=["health"])
@@ -86,5 +91,30 @@ async def readiness(request: Request) -> dict[str, str]:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={"status": "not_ready", "dependency": "database"},
         ) from None
+
+    try:
+        async with engine.connect() as connection:
+            result = await connection.execute(text("SELECT version_num FROM alembic_version"))
+            applied_heads = frozenset(result.scalars().all())
+    except SQLAlchemyError as exc:
+        logger.error(
+            "Migration readiness check failed (%s)",
+            type(exc).__name__,
+            extra={"request_id": getattr(request.state, "request_id", None)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "not_ready", "dependency": "migrations"},
+        ) from None
+
+    if applied_heads != MIGRATION_HEADS:
+        logger.error(
+            "Migration readiness check failed: applied migrations are not at head",
+            extra={"request_id": getattr(request.state, "request_id", None)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"status": "not_ready", "dependency": "migrations"},
+        )
 
     return {"status": "ok"}

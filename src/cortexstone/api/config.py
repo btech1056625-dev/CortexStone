@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Self
 from urllib.parse import urlsplit
 
@@ -27,6 +28,8 @@ class Settings(BaseModel):
     auth_audience: str | None = None
     auth_jwks_url: str | None = None
     permission_admin_subjects: tuple[str, ...] = ()
+    github_token: str | None = Field(default=None, repr=False)
+    github_issue_read_allowed_targets: tuple[str, ...] = ()
 
     @field_validator("database_url")
     @classmethod
@@ -53,6 +56,35 @@ class Settings(BaseModel):
         if value.startswith("your_") and value.endswith("_api_key_here"):
             return None
         return value or None
+
+    @field_validator("github_token")
+    @classmethod
+    def validate_github_token(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value or value == "your_github_token_here":
+            return None
+        if any(ord(character) < 33 or ord(character) > 126 for character in value):
+            raise ValueError("GitHub token must contain printable non-whitespace characters")
+        return value
+
+    @field_validator("github_issue_read_allowed_targets")
+    @classmethod
+    def validate_github_repositories(cls, targets: tuple[str, ...]) -> tuple[str, ...]:
+        repository_pattern = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+        if any(
+            not repository_pattern.fullmatch(target)
+            or any(
+                part in {".", ".."} or len(part) > max_length
+                for part, max_length in zip(target.split("/"), (39, 100), strict=True)
+            )
+            for target in targets
+        ):
+            raise ValueError("GitHub policy targets must be exact owner/repository names")
+        if len(set(targets)) != len(targets):
+            raise ValueError("GitHub policy targets must be unique")
+        return targets
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> Self:
@@ -145,6 +177,15 @@ class Settings(BaseModel):
             google_reasoner_model_id=os.getenv(
                 "GOOGLE_REASONER_MODEL_ID",
                 "gemini-2.5-flash",
+            ),
+            github_token=os.getenv("GITHUB_TOKEN"),
+            github_issue_read_allowed_targets=tuple(
+                target.strip()
+                for target in os.getenv(
+                    "CORTEXSTONE_POLICY_GITHUB_ISSUE_READ_TARGETS",
+                    "",
+                ).split(",")
+                if target.strip()
             ),
             auth_issuer=os.getenv("CORTEXSTONE_AUTH_ISSUER"),
             auth_audience=os.getenv("CORTEXSTONE_AUTH_AUDIENCE"),

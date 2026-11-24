@@ -7,9 +7,10 @@ from uuid import UUID, uuid4
 from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from cortexstone.db.base import Base, TimestampMixin
+from cortexstone.security.redaction import redact_secrets, redact_value
 
 
 class PermissionGrantModel(Base, TimestampMixin):
@@ -37,7 +38,7 @@ class PermissionGrantModel(Base, TimestampMixin):
 
 
 class SecurityAuditEventModel(Base):
-    """Append-only metadata for permission grants and revocations."""
+    """Append-only, content-redacted security and action lifecycle audit metadata."""
 
     __tablename__ = "security_audit_events"
     __table_args__ = (Index("ix_security_audit_events_subject_time", "subject_id", "occurred_at"),)
@@ -58,3 +59,11 @@ class SecurityAuditEventModel(Base):
         server_default=text("CURRENT_TIMESTAMP"),
     )
     details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+
+    @validates("event_type", "actor_id", "subject_id")
+    def redact_text(self, _key: str, value: str) -> str:
+        return redact_secrets(value)
+
+    @validates("details")
+    def redact_details(self, _key: str, value: dict[str, Any]) -> dict[str, Any]:
+        return redact_value(value)

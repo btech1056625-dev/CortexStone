@@ -206,6 +206,21 @@ def test_action_hash_is_stable_for_equivalent_json_arguments():
     assert PolicyEngine.action_hash(left) == PolicyEngine.action_hash(right)
 
 
+def test_action_hash_binds_purpose_and_idempotency_key():
+    original = ProposedAction(
+        tool_name="notes.create",
+        target_ref="notes/personal",
+        arguments={"title": "Plan", "content": "Review"},
+        purpose="Create the requested note",
+        idempotency_key="request-1",
+    )
+    changed_purpose = original.model_copy(update={"purpose": "Create a different note"})
+    changed_idempotency_key = original.model_copy(update={"idempotency_key": "request-2"})
+
+    assert PolicyEngine.action_hash(original) != PolicyEngine.action_hash(changed_purpose)
+    assert PolicyEngine.action_hash(original) != PolicyEngine.action_hash(changed_idempotency_key)
+
+
 def test_rejects_duplicate_tool_policy():
     with pytest.raises(ValueError, match="Duplicate tool policy"):
         PolicyEngine([READ_TOOL, READ_TOOL])

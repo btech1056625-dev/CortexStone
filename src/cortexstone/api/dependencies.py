@@ -19,6 +19,8 @@ from cortexstone.application.chat.service import ChatService
 from cortexstone.application.memory.service import MemoryService
 from cortexstone.db.session import get_db_session as yield_db_session
 from cortexstone.memory.repositories.memory_repo import SqlAlchemyMemoryRepository
+from cortexstone.security.action_runs.service import SqlAlchemyActionRunService
+from cortexstone.security.approvals.service import SqlAlchemyApprovalService
 from cortexstone.security.permissions.service import SqlAlchemyPermissionService
 from cortexstone.security.policy import (
     ActionScope,
@@ -28,6 +30,7 @@ from cortexstone.security.policy import (
     RiskLevel,
     ToolPolicy,
 )
+from cortexstone.tools.runner import ToolRunner
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -59,6 +62,53 @@ def get_permission_service(request: Request) -> SqlAlchemyPermissionService:
             detail="Permission storage is not configured.",
         )
     return permission_service
+
+
+def get_approval_service(request: Request) -> SqlAlchemyApprovalService:
+    """Resolve durable approval management, failing if persistence is unavailable."""
+    approval_service = request.app.state.approval_service
+    if approval_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Approval storage is not configured.",
+        )
+    return approval_service
+
+
+def get_action_run_service(request: Request) -> SqlAlchemyActionRunService:
+    """Resolve durable action lifecycle persistence, failing if unavailable."""
+    action_run_service = request.app.state.action_run_service
+    if action_run_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Action run storage is not configured.",
+        )
+    return action_run_service
+
+
+def get_tool_runner(
+    request: Request,
+    action_run_service: Annotated[
+        SqlAlchemyActionRunService,
+        Depends(get_action_run_service),
+    ],
+) -> ToolRunner:
+    """Build the policy-enforcing runner with the app's registered executors."""
+    executors = request.app.state.tool_executors
+    if not executors:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No tool executors are configured.",
+        )
+    approval_service = request.app.state.approval_service
+    return ToolRunner(
+        policy_engine=request.app.state.policy_engine,
+        executors=executors,
+        run_recorder=action_run_service,
+        approval_resolver=(
+            approval_service.resolve_for_action if approval_service is not None else None
+        ),
+    )
 
 
 def get_model_client(request: Request) -> ModelClient:
@@ -145,6 +195,8 @@ def get_chat_service(
 def build_policy_engine(
     allowed_targets: tuple[str, ...],
     *,
+    github_issue_read_allowed_targets: tuple[str, ...] = (),
+    github_enabled: bool = False,
     async_permission_service: AsyncPermissionService | None = None,
 ) -> PolicyEngine:
     """Create policies from validated server configuration."""
@@ -158,6 +210,16 @@ def build_policy_engine(
                 allowed_targets=frozenset(allowed_targets),
                 required_arguments=frozenset({"query"}),
                 optional_arguments=frozenset({"limit"}),
+            )
+        )
+    if github_enabled and github_issue_read_allowed_targets:
+        policies.append(
+            ToolPolicy(
+                tool_name="github.issue.read",
+                scope=ActionScope.READ,
+                risk=RiskLevel.LOW,
+                allowed_targets=frozenset(github_issue_read_allowed_targets),
+                required_arguments=frozenset({"issue_number"}),
             )
         )
     return PolicyEngine(policies, async_permission_service=async_permission_service)

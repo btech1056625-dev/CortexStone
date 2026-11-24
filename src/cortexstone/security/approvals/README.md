@@ -1,3 +1,7 @@
 # Approval controls
 
-Implement canonical action hashing, target binding, expiry, decision, and pre-execution revalidation. Changed material arguments require a new approval; revocation takes precedence over an earlier decision.
+Approval requests and decisions are stored in PostgreSQL by migration `0003`. Authenticated principals can create requests for actions that current policy marks `REQUIRE_APPROVAL`, list their own requests, approve/reject pending requests, and revoke pending or approved requests. Decisions and revocations are recorded atomically in `security_audit_events`; audit details contain the action hash and identifiers, not arguments.
+
+Approval evidence binds the principal, exact target, tool, canonical arguments, purpose, and idempotency key. Requests expire after 15 minutes. `SqlAlchemyApprovalService.resolve_for_action` is the uncached resolver to pass to `ToolRunner`; it returns only evidence matching the principal and exact action hash. No write-capable tool policy or production executor is currently registered, so the routes establish persistence but do not make an action executable.
+
+Action attempts and lifecycle transitions are stored by migration `0004`. Construct `ToolRunner` with the app-scoped `SqlAlchemyActionRunService` as its required `run_recorder`. Each attempt and transition is committed with a redacted `security_audit_events` record. Action-run rows retain identifiers, the canonical action hash, tool name, state, policy/failure codes, and timestamps; lifecycle audit details never include action arguments, targets, purposes, executor results, or exception messages.

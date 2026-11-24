@@ -11,6 +11,7 @@ Cortexstone is implemented as a modular monolith:
 - `src/cortexstone/db/` — SQLAlchemy session/model infrastructure and Alembic migrations
 - `src/cortexstone/security/policy/` — deterministic authorization decisions
 - `src/cortexstone/security/permissions/` — uncached database grant lookup and audited administration
+- `src/cortexstone/security/action_runs/` — durable action lifecycle and redacted execution audit
 - `src/cortexstone/tools/runner/` — policy-checked execution boundary
 - `frontend/dashboard/` — live/mock React workbench
 
@@ -33,14 +34,15 @@ Permission grant/revocation routes are administrator-only and constrained by reg
 
 ## Persistence
 
-PostgreSQL is the persistence boundary for memory and permission data. pgvector stores 384-dimensional BGE embeddings. Alembic migration `0001` creates the memory table and vector index; `0002` adds permission grants and security audit events. Permission changes and their audit records share a transaction.
+PostgreSQL is the persistence boundary for memory, permissions, approvals, and action runs. pgvector stores 384-dimensional BGE embeddings. Alembic migrations `0001`–`0004` create memory/vector storage, permission and audit tables, approvals, and durable action-run lifecycle state. Permission/approval changes and their audit records share a transaction. Every `ToolRunner` requires an `ActionRunRecorder`, and attempt/state changes are committed atomically with redacted lifecycle audit events.
 
 ## Deferred architecture
 
-- Identity-provider role synchronization and durable approval state
+- Identity-provider role synchronization
 - Conversation history persistence
 - Worker and scheduler processes
 - Connector registry and provider executors
+- Action outcome verification and recovery for interrupted runs
 - Guardian finding storage
 - Independent action outcome verification
 - Production deployment topology and backups

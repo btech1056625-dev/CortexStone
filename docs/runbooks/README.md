@@ -35,8 +35,8 @@ docker compose logs db migrate api
 ```
 
 - `/health` checks process availability.
-- `/ready` checks database connectivity.
-- Readiness does not verify migration state or model-provider availability.
+- `/ready` checks database connectivity and verifies the applied Alembic revisions match the packaged migration heads.
+- Model providers are feature-scoped rather than global readiness dependencies; chat reports unavailable when a required provider is not configured.
 - An authentication 503 means OIDC configuration or provider availability is not usable.
 - A protected-route 401 means the bearer credential is missing or invalid.
 
