@@ -101,9 +101,7 @@ class OAuthService:
         http_client: httpx.AsyncClient,
         session_authenticator: SessionTokenAuthenticator,
         *,
-        google_identity_verifier: Callable[
-            [str, str], tuple[str, str]
-        ] | None = None,
+        google_identity_verifier: Callable[[str, str], tuple[str, str]] | None = None,
     ) -> None:
         if settings.oauth_token_encryption_key is None:
             raise ValueError("OAuth token encryption is not configured.")
@@ -258,9 +256,7 @@ class OAuthService:
                 "That provider account is already linked to another Cortexstone account."
             ) from None
 
-        session_token = (
-            self._session_authenticator.issue(user) if flow.mode == "login" else None
-        )
+        session_token = self._session_authenticator.issue(user) if flow.mode == "login" else None
         return OAuthCompletion(provider, user, flow.mode, session_token), flow.return_origin
 
     async def get_access_token(
@@ -325,9 +321,7 @@ class OAuthService:
     async def list_connections(self, principal_id: str) -> tuple[OAuthConnection, ...]:
         async with self._session_factory() as session:
             identities = await session.scalars(
-                select(OAuthIdentityModel).where(
-                    OAuthIdentityModel.principal_id == principal_id
-                )
+                select(OAuthIdentityModel).where(OAuthIdentityModel.principal_id == principal_id)
             )
             credentials = await session.scalars(
                 select(OAuthCredentialModel).where(
@@ -555,12 +549,8 @@ class OAuthService:
                 .with_for_update()
             )
             if credential is not None and credential.provider_subject != provider_subject:
-                raise OAuthFlowError(
-                    "A different account for this provider is already connected."
-                )
-            encrypted_refresh = (
-                self._encrypt(refresh_token) if refresh_token is not None else None
-            )
+                raise OAuthFlowError("A different account for this provider is already connected.")
+            encrypted_refresh = self._encrypt(refresh_token) if refresh_token is not None else None
             if credential is None:
                 session.add(
                     OAuthCredentialModel(

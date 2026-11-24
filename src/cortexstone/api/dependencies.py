@@ -379,9 +379,7 @@ def build_policy_engine(
                     scope=ActionScope.WRITE,
                     risk=RiskLevel.HIGH,
                     allowed_targets=frozenset({"primary"}),
-                    required_arguments=frozenset(
-                        {"summary", "start", "end", "time_zone"}
-                    ),
+                    required_arguments=frozenset({"summary", "start", "end", "time_zone"}),
                 ),
                 ToolPolicy(
                     tool_name=GOOGLE_CALENDAR_EVENT_UPDATE_TOOL,
@@ -389,9 +387,7 @@ def build_policy_engine(
                     risk=RiskLevel.HIGH,
                     allowed_targets=frozenset({"primary"}),
                     required_arguments=frozenset({"event_id"}),
-                    optional_arguments=frozenset(
-                        {"summary", "start", "end", "time_zone"}
-                    ),
+                    optional_arguments=frozenset({"summary", "start", "end", "time_zone"}),
                 ),
                 ToolPolicy(
                     tool_name=GOOGLE_CALENDAR_EVENT_DELETE_TOOL,

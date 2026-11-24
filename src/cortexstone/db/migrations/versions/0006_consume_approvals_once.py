@@ -26,9 +26,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        sa.text("UPDATE approvals SET status = 'expired' WHERE status = 'consumed'")
-    )
+    op.execute(sa.text("UPDATE approvals SET status = 'expired' WHERE status = 'consumed'"))
     op.drop_constraint("ck_approvals_status_valid", "approvals", type_="check")
     op.create_check_constraint(
         "status_valid",

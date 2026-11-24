@@ -86,9 +86,7 @@ async def list_connections(
                 "display_name": connection.display_name,
                 "scopes": list(connection.scopes),
                 "expires_at": (
-                    connection.expires_at.isoformat()
-                    if connection.expires_at is not None
-                    else None
+                    connection.expires_at.isoformat() if connection.expires_at is not None else None
                 ),
             }
             for connection in connections
@@ -168,7 +166,7 @@ def _popup_response(origin: str | None, message: dict[str, str]) -> HTMLResponse
     safe_origin = json.dumps(origin).replace("<", "\\u003c")
     safe_message = json.dumps(message).replace("<", "\\u003c")
     html = (
-        "<!doctype html><meta charset=\"utf-8\"><title>OAuth complete</title>"
+        '<!doctype html><meta charset="utf-8"><title>OAuth complete</title>'
         "<p>You can close this window.</p><script>"
         f"if(window.opener)window.opener.postMessage({safe_message},{safe_origin});"
         "window.close();</script>"

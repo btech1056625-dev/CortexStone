@@ -138,9 +138,7 @@ async def create_event(
         purpose="Create an event in the connected primary calendar.",
         idempotency_key=_principal_idempotency_key(user.subject, idempotency_key),
     )
-    result = await _execute_write(
-        action, user, principal, tool_runner, approval_service
-    )
+    result = await _execute_write(action, user, principal, tool_runner, approval_service)
     return result if isinstance(result, Response) else _require_event(result)
 
 
@@ -172,9 +170,7 @@ async def update_event(
         purpose="Update an event in the connected primary calendar.",
         idempotency_key=_principal_idempotency_key(user.subject, idempotency_key),
     )
-    result = await _execute_write(
-        action, user, principal, tool_runner, approval_service
-    )
+    result = await _execute_write(action, user, principal, tool_runner, approval_service)
     return result if isinstance(result, Response) else _require_event(result)
 
 
@@ -198,9 +194,7 @@ async def delete_event(
         purpose="Delete an event from the connected primary calendar.",
         idempotency_key=_principal_idempotency_key(user.subject, idempotency_key),
     )
-    result = await _execute_write(
-        action, user, principal, tool_runner, approval_service
-    )
+    result = await _execute_write(action, user, principal, tool_runner, approval_service)
     if isinstance(result, Response):
         return result
     if not isinstance(result, dict) or result.get("deleted") is not True:

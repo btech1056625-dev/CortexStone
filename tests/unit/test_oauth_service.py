@@ -84,9 +84,7 @@ def test_authorization_url_uses_pkce_nonce_and_exact_callback_origin():
     assert parameters["code_challenge_method"] == ["S256"]
     assert parameters["code_challenge"][0]
     assert parameters["nonce"] == [flow.nonce]
-    assert parameters["redirect_uri"] == [
-        "https://api.example.test/api/v1/oauth/google/callback"
-    ]
+    assert parameters["redirect_uri"] == ["https://api.example.test/api/v1/oauth/google/callback"]
     assert flow.return_origin == DASHBOARD_ORIGIN
     assert flow.principal_id is None
     assert len(flow.state_hash) == 64

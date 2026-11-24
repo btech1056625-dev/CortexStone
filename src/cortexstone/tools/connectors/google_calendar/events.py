@@ -19,9 +19,7 @@ GOOGLE_CALENDAR_EVENT_READ_TOOL = "google_calendar.events.read"
 GOOGLE_CALENDAR_EVENT_CREATE_TOOL = "google_calendar.events.create"
 GOOGLE_CALENDAR_EVENT_UPDATE_TOOL = "google_calendar.events.update"
 GOOGLE_CALENDAR_EVENT_DELETE_TOOL = "google_calendar.events.delete"
-GOOGLE_CALENDAR_API_BASE_URL = (
-    "https://www.googleapis.com/calendar/v3/calendars/primary/events"
-)
+GOOGLE_CALENDAR_API_BASE_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
 GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.owned"
 MAX_CALENDAR_RESPONSE_BYTES = 512 * 1024
 MAX_EVENTS_PER_RESPONSE = 100
@@ -224,9 +222,7 @@ class GoogleCalendarConnector:
                 headers=self._headers(),
             ) as response:
                 if response.status_code == 404 and method == "DELETE":
-                    raise GoogleCalendarEventNotFoundError(
-                        "The Calendar event was not found."
-                    )
+                    raise GoogleCalendarEventNotFoundError("The Calendar event was not found.")
                 if response.status_code != 204:
                     raise GoogleCalendarProviderError(
                         "Google Calendar could not complete the event operation."
@@ -253,13 +249,9 @@ class GoogleCalendarConnector:
                 json=json_body,
             ) as response:
                 if response.status_code == 409:
-                    raise GoogleCalendarConflictError(
-                        "The Calendar event already exists."
-                    )
+                    raise GoogleCalendarConflictError("The Calendar event already exists.")
                 if response.status_code == 404:
-                    raise GoogleCalendarEventNotFoundError(
-                        "The Calendar event was not found."
-                    )
+                    raise GoogleCalendarEventNotFoundError("The Calendar event was not found.")
                 if response.status_code in {401, 403}:
                     raise GoogleCalendarProviderError(
                         "Google rejected the Calendar credentials or permission."
