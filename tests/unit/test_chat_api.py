@@ -194,13 +194,9 @@ def test_chat_redacts_user_and_stored_memory_secrets_before_model_and_retrieval(
     response = asyncio.run(send_request())
 
     assert response.status_code == 200
-    assert memory_service.search_memories.await_args.kwargs["query"] == (
-        "Check api_key=[REDACTED]"
-    )
+    assert memory_service.search_memories.await_args.kwargs["query"] == ("Check api_key=[REDACTED]")
     recorded_content = "\n".join(
-        message.content
-        for call in model_client.recorded_calls
-        for message in call["messages"]
+        message.content for call in model_client.recorded_calls for message in call["messages"]
     )
     assert raw_user_secret not in recorded_content
     assert "fake-stored-secret" not in recorded_content

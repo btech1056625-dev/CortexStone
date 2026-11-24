@@ -134,9 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.action_run_service = action_run_service
     application.state.policy_engine = build_policy_engine(
         configured_settings.notes_search_allowed_targets,
-        github_issue_read_allowed_targets=(
-            configured_settings.github_issue_read_allowed_targets
-        ),
+        github_issue_read_allowed_targets=(configured_settings.github_issue_read_allowed_targets),
         github_enabled=configured_settings.github_token is not None,
         async_permission_service=permission_service,
     )

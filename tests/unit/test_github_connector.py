@@ -121,9 +121,7 @@ def request_issue(application, target: str = TARGET) -> httpx.Response:
             transport=httpx.ASGITransport(app=application),
             base_url="http://testserver",
         ) as client:
-            return await client.get(
-                f"/api/v1/github/{owner}/{repository}/issues/{ISSUE_NUMBER}"
-            )
+            return await client.get(f"/api/v1/github/{owner}/{repository}/issues/{ISSUE_NUMBER}")
 
     return asyncio.run(send_request())
 
@@ -205,9 +203,7 @@ def test_github_issue_route_rejects_mismatched_provider_resource():
         asyncio.run(client.aclose())
 
     assert response.status_code == 502
-    assert response.json()["error"]["message"] == (
-        "GitHub could not provide the requested issue."
-    )
+    assert response.json()["error"]["message"] == ("GitHub could not provide the requested issue.")
     assert [status for _, status in recorder.transitions] == [
         ActionRunStatus.RUNNING,
         ActionRunStatus.FAILED,

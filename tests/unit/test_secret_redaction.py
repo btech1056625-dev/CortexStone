@@ -14,10 +14,7 @@ from cortexstone.security.redaction import (
 
 
 def test_redacts_supported_secret_patterns():
-    private_key = (
-        "-----BEGIN RSA PRIVATE KEY-----\nfake-private-key\n"
-        "-----END RSA PRIVATE KEY-----"
-    )
+    private_key = "-----BEGIN RSA PRIVATE KEY-----\nfake-private-key\n-----END RSA PRIVATE KEY-----"
     text = (
         "api_key='fake-assignment-value' "
         "Authorization: Bearer fake.bearer.token "

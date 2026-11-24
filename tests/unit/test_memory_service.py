@@ -394,9 +394,7 @@ async def test_create_and_update_redact_before_embedding_or_persistence():
     await service.update_memory(owner_id="user_embed", memory_id=uuid4(), update_data=updated)
     update_args = mock_repo.update.await_args.kwargs
     assert update_args["update_data"].content == "Updated api_key=[REDACTED]"
-    assert mock_provider.embed_document.await_args_list[1].args[0] == (
-        "Updated api_key=[REDACTED]"
-    )
+    assert mock_provider.embed_document.await_args_list[1].args[0] == ("Updated api_key=[REDACTED]")
 
 
 @pytest.mark.anyio

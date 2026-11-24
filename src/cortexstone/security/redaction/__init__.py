@@ -38,7 +38,9 @@ _PEM_PRIVATE_KEY = re.compile(
     r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----.*?-----END [A-Z0-9 ]*PRIVATE KEY-----",
     re.DOTALL,
 )
-_URL_CREDENTIALS = re.compile(r"(?i)(?P<prefix>\b[a-z][a-z0-9+.-]*://[^/\s:@]+:)(?P<secret>[^@\s]+)@")
+_URL_CREDENTIALS = re.compile(
+    r"(?i)(?P<prefix>\b[a-z][a-z0-9+.-]*://[^/\s:@]+:)(?P<secret>[^@\s]+)@"
+)
 _BEARER_TOKEN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/-]+=*")
 _AUTH_HEADER = re.compile(
     r"(?i)(?P<prefix>\b(?:authorization|proxy-authorization)\s*[:=]\s*)"
