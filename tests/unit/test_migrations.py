@@ -58,7 +58,10 @@ def test_offline_upgrade_sql_generation(alembic_cfg: Config, capsys) -> None:
     assert "CREATE TABLE approvals" in sql_text
     assert "action_hash" in sql_text
     assert "action_data JSONB NOT NULL" in sql_text
-    assert "status IN ('pending', 'approved', 'rejected', 'expired', 'revoked')" in sql_text
+    assert (
+        "status IN ('pending', 'approved', 'rejected', 'expired', 'revoked', 'consumed')"
+        in sql_text
+    )
     assert "CREATE TABLE action_runs" in sql_text
     assert "action_id" in sql_text
     assert (

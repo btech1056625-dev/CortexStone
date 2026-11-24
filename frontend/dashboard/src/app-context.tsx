@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 import { createApi } from './api/client';
 import { config } from './config';
 import type { DataMode, DemoScenario, HealthSnapshot } from './api/types';
@@ -35,7 +35,7 @@ export function HealthProvider({ children }: { children: ReactNode }) {
   const [accessToken, setAccessToken] = useState('');
   const [snap, setSnap] = useState<HealthSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     api = createApi(mode, config.apiBase, mode === 'mock' ? scenario : 'normal', accessToken || undefined);
     setSnap(null);
   }, [mode, scenario, accessToken]);

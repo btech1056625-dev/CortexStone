@@ -1,8 +1,9 @@
 import { seedFindings, seedJobs, seedMemories } from './mock-data';
 import type {
-  ActionValidation, Api, CalendarEvent, ChatResponse, CreateMemory, DataMode, DemoScenario, Failure, GitHubIssue,
+  ActionValidation, Api, CalendarEvent, CalendarEventCreate, CalendarEventUpdate, CalendarWriteApproval, CalendarWriteResult,
+  ChatResponse, CreateMemory, DataMode, DemoScenario, Failure, GitHubIssue,
   GitHubPullRequest, GitHubRepository, GitHubWorkflowRun, HealthSnapshot, MemoryRecord, Note,
-  PolicyCheck, Principal, Probe, ProposedAction, Result,
+  OAuthConnection, OAuthProvider, OAuthProviders, PolicyCheck, Principal, Probe, ProposedAction, Result,
 } from './types';
 import { API_PATHS } from '../config';
 
@@ -80,7 +81,7 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
     };
     return {
       mode,
-      support: { health: 'live', actions: 'live', chat: 'live', memory: 'live', jobs: 'unavailable', guardian: 'unavailable', integrations: 'unavailable' },
+      support: { health: 'live', actions: 'live', chat: 'live', memory: 'live', jobs: 'unavailable', guardian: 'unavailable', integrations: 'live' },
       async health() {
         const [health, ready, me] = await Promise.all([
           probe(API_PATHS.health), probe(API_PATHS.ready),
@@ -123,7 +124,47 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
       listGithubIssues: async () => notRegistered('GitHub connector routes'),
       listGithubPulls: async () => notRegistered('GitHub connector routes'),
       listGithubRuns: async () => notRegistered('GitHub connector routes'),
-      listCalendarEvents: async () => notRegistered('Calendar connector routes'),
+      getGithubIssue: (repository, issueNumber) => {
+        const [owner, name] = repository.split('/', 2);
+        if (!owner || !name || repository.split('/').length !== 2 || !Number.isInteger(issueNumber) || issueNumber < 1) {
+          return Promise.resolve({ ok: false, kind: 'invalid', message: 'Enter an owner/repository and a positive issue number.' });
+        }
+        return request<GitHubIssue>(
+          `/api/v1/github/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues/${issueNumber}`,
+        );
+      },
+      listCalendarEvents: (start, end, timezone) => request<CalendarEvent[]>(
+        `${API_PATHS.calendarEvents}?${new URLSearchParams({ start, end, time_zone: timezone })}`,
+      ),
+      createCalendarEvent: (event, idempotencyKey) => request<CalendarWriteResult>(
+        API_PATHS.calendarEvents,
+        { method: 'POST', body: JSON.stringify(event), headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
+      updateCalendarEvent: (id, event, idempotencyKey) => request<CalendarWriteResult>(
+        `${API_PATHS.calendarEvents}/${encodeURIComponent(id)}`,
+        { method: 'PATCH', body: JSON.stringify(event), headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
+      deleteCalendarEvent: (id, idempotencyKey) => request<void | CalendarWriteApproval>(
+        `${API_PATHS.calendarEvents}/${encodeURIComponent(id)}`,
+        { method: 'DELETE', headers: { 'Idempotency-Key': idempotencyKey } },
+      ),
+      oauthProviders: () => request<OAuthProviders>(API_PATHS.oauthProviders),
+      async oauthConnections() {
+        const result = await request<{ connections: OAuthConnection[] }>(API_PATHS.oauthConnections);
+        return result.ok ? { ok: true, data: result.data.connections } : result;
+      },
+      connectOAuthProvider: (provider, returnOrigin) => request<{ authorization_url: string }>(
+        `/api/v1/oauth/${provider}/connect?${new URLSearchParams({ return_origin: returnOrigin })}`,
+        { method: 'POST' },
+      ),
+      disconnectOAuthProvider: (provider) => request<void>(
+        `${API_PATHS.oauthConnections}/${provider}`,
+        { method: 'DELETE' },
+      ),
+      decideApproval: (id, decision) => request<unknown>(
+        `/api/v1/approvals/${encodeURIComponent(id)}/decision`,
+        { method: 'POST', body: JSON.stringify({ decision }) },
+      ),
       listNotes: async () => notRegistered('Notes routes'),
       createNote: async () => notRegistered('Notes routes'),
       updateNote: async () => notRegistered('Notes routes'),
@@ -140,6 +181,10 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
   const repos: GitHubRepository[] = [{ full_name: 'octo-org/sample-repo', name: 'sample-repo', owner: 'octo-org', private: false }];
   const calendarEvents: CalendarEvent[] = [
     { id: 'event_001', summary: 'Platform team sync', start: new Date(Date.now() + 3_600_000).toISOString(), end: new Date(Date.now() + 5_400_000).toISOString(), timezone: 'Asia/Kolkata' },
+  ];
+  const oauthConnections: OAuthConnection[] = [
+    { provider: 'google', connected: true, display_name: 'Demo Google', scopes: [], expires_at: null },
+    { provider: 'github', connected: true, display_name: 'Demo GitHub', scopes: [], expires_at: null },
   ];
   const requireApproval = (reason: ActionValidation['reason'] = 'approval_required'): ActionValidation => ({ status: 'require_approval', reason, action_hash: hash(), risk: 'medium' });
   const mockActionResult = (action: ProposedAction): ActionValidation => {
@@ -202,9 +247,69 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
     async listFindings() { await delay(300); return { ok: true, data: seedFindings() }; },
     async listGithubRepos() { await delay(180); return { ok: true, data: repos.map((repo) => ({ ...repo })) }; },
     async listGithubIssues() { await delay(240); return { ok: true, data: [{ number: 14, title: 'Tighten API response validation', state: 'open' }] }; },
+    async getGithubIssue(_repository, issueNumber) {
+      await delay(120);
+      return { ok: true, data: { number: issueNumber, title: 'Sample connected issue', state: 'open' } };
+    },
     async listGithubPulls() { await delay(240); return { ok: true, data: [{ number: 18, title: 'Add connector read views', state: 'open', draft: false }] }; },
     async listGithubRuns() { await delay(240); return { ok: true, data: [{ id: 103, name: 'CI', status: 'completed', conclusion: 'success', created_at: new Date().toISOString() }] }; },
     async listCalendarEvents() { await delay(200); return { ok: true, data: calendarEvents.map((event) => ({ ...event })) }; },
+    async createCalendarEvent(event) {
+      await delay(180);
+      const created = {
+        id: `event_${crypto.randomUUID()}`,
+        summary: event.summary,
+        start: event.start,
+        end: event.end,
+        timezone: event.time_zone,
+      };
+      calendarEvents.unshift(created);
+      return { ok: true, data: { ...created } };
+    },
+    async updateCalendarEvent(id, event) {
+      await delay(180);
+      const current = calendarEvents.find((item) => item.id === id);
+      if (!current) return { ok: false, kind: 'invalid', message: 'That Calendar event no longer exists.' };
+      if (event.summary !== undefined) current.summary = event.summary;
+      if (event.start !== undefined) current.start = event.start;
+      if (event.end !== undefined) current.end = event.end;
+      if (event.time_zone !== undefined) current.timezone = event.time_zone;
+      return { ok: true, data: { ...current } };
+    },
+    async deleteCalendarEvent(id) {
+      await delay(180);
+      const index = calendarEvents.findIndex((item) => item.id === id);
+      if (index < 0) return { ok: false, kind: 'invalid', message: 'That Calendar event no longer exists.' };
+      calendarEvents.splice(index, 1);
+      return { ok: true, data: undefined };
+    },
+    async oauthProviders() { await delay(80); return { ok: true, data: { providers: ['google', 'github'] } }; },
+    async oauthConnections() {
+      await delay(80);
+      return { ok: true, data: oauthConnections.map((connection) => ({ ...connection })) };
+    },
+    async connectOAuthProvider(provider) {
+      await delay(80);
+      const connection = oauthConnections.find((item) => item.provider === provider);
+      if (connection) {
+        connection.connected = true;
+        connection.display_name = `Demo ${provider === 'google' ? 'Google' : 'GitHub'}`;
+      }
+      return { ok: true, data: { authorization_url: `https://example.test/oauth/${provider}` } };
+    },
+    async disconnectOAuthProvider(provider) {
+      await delay(80);
+      const connection = oauthConnections.find((item) => item.provider === provider);
+      if (connection) {
+        connection.connected = false;
+        connection.display_name = null;
+      }
+      return { ok: true, data: undefined };
+    },
+    async decideApproval(_id, decision) {
+      await delay(80);
+      return { ok: true, data: { status: decision } };
+    },
     async listNotes() { await delay(160); return { ok: true, data: notes.map((note) => ({ ...note })) }; },
     async createNote(title, content) {
       await delay(180);
@@ -271,9 +376,18 @@ export function createApi(mode: DataMode, base: string, scenario: DemoScenario =
     listFindings: () => gate(mockApi.listFindings),
     listGithubRepos: () => gate(mockApi.listGithubRepos),
     listGithubIssues: (repo) => gate(() => mockApi.listGithubIssues(repo)),
+    getGithubIssue: (repo, issueNumber) => gate(() => mockApi.getGithubIssue(repo, issueNumber)),
     listGithubPulls: (repo) => gate(() => mockApi.listGithubPulls(repo)),
     listGithubRuns: (repo) => gate(() => mockApi.listGithubRuns(repo)),
     listCalendarEvents: (start, end, timezone) => gate(() => mockApi.listCalendarEvents(start, end, timezone)),
+    createCalendarEvent: (event, key) => gate(() => mockApi.createCalendarEvent(event, key)),
+    updateCalendarEvent: (id, event, key) => gate(() => mockApi.updateCalendarEvent(id, event, key)),
+    deleteCalendarEvent: (id, key) => gate(() => mockApi.deleteCalendarEvent(id, key)),
+    oauthProviders: () => gate(mockApi.oauthProviders),
+    oauthConnections: () => gate(mockApi.oauthConnections),
+    connectOAuthProvider: (provider, origin) => gate(() => mockApi.connectOAuthProvider(provider, origin)),
+    disconnectOAuthProvider: (provider) => gate(() => mockApi.disconnectOAuthProvider(provider)),
+    decideApproval: (id, decision) => gate(() => mockApi.decideApproval(id, decision)),
     listNotes: () => gate(mockApi.listNotes),
     createNote: (title, content) => gate(() => mockApi.createNote(title, content)),
     updateNote: (id, title, content) => gate(() => mockApi.updateNote(id, title, content)),

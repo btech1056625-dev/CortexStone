@@ -7,6 +7,7 @@ import re
 from typing import Self
 from urllib.parse import urlsplit
 
+from cryptography.fernet import Fernet
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
@@ -30,6 +31,14 @@ class Settings(BaseModel):
     permission_admin_subjects: tuple[str, ...] = ()
     github_token: str | None = Field(default=None, repr=False)
     github_issue_read_allowed_targets: tuple[str, ...] = ()
+    google_oauth_client_id: str | None = None
+    google_oauth_client_secret: str | None = Field(default=None, repr=False)
+    github_app_client_id: str | None = None
+    github_app_client_secret: str | None = Field(default=None, repr=False)
+    oauth_public_api_base_url: str | None = None
+    oauth_dashboard_origins: tuple[str, ...] = ()
+    oauth_session_signing_key: str | None = Field(default=None, repr=False)
+    oauth_token_encryption_key: str | None = Field(default=None, repr=False)
 
     @field_validator("database_url")
     @classmethod
@@ -46,6 +55,60 @@ class Settings(BaseModel):
             return None
         value = value.strip()
         return value or None
+
+    @field_validator(
+        "google_oauth_client_id",
+        "google_oauth_client_secret",
+        "github_app_client_id",
+        "github_app_client_secret",
+        "oauth_public_api_base_url",
+        "oauth_session_signing_key",
+        "oauth_token_encryption_key",
+    )
+    @classmethod
+    def trim_oauth_settings(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @field_validator("oauth_token_encryption_key")
+    @classmethod
+    def validate_oauth_encryption_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            Fernet(value.encode("ascii"))
+        except (ValueError, UnicodeEncodeError):
+            raise ValueError("OAuth token encryption key must be a valid Fernet key") from None
+        return value
+
+    @field_validator("oauth_dashboard_origins")
+    @classmethod
+    def validate_oauth_dashboard_origins(cls, origins: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(origins)) != len(origins):
+            raise ValueError("OAuth dashboard origins must be unique")
+        for origin in origins:
+            parsed = urlsplit(origin)
+            local_http = parsed.scheme == "http" and parsed.hostname in {
+                "localhost",
+                "127.0.0.1",
+                "::1",
+            }
+            if (
+                not origin
+                or origin != origin.strip()
+                or (parsed.scheme != "https" and not local_http)
+                or not parsed.netloc
+                or parsed.path
+                or parsed.query
+                or parsed.fragment
+                or parsed.username is not None
+                or parsed.password is not None
+                or "*" in origin
+            ):
+                raise ValueError("OAuth dashboard origins must be explicit HTTP(S) origins")
+        return origins
 
     @field_validator("groq_api_key", "google_api_key")
     @classmethod
@@ -102,6 +165,46 @@ class Settings(BaseModel):
                 parsed = urlsplit(value)
                 if parsed.scheme != "https" or not parsed.netloc:
                     raise ValueError(f"{setting_name} must be an HTTPS URL")
+        oauth_providers = (
+            (self.google_oauth_client_id, self.google_oauth_client_secret),
+            (self.github_app_client_id, self.github_app_client_secret),
+        )
+        if any(
+            (client_id is None) != (client_secret is None)
+            for client_id, client_secret in oauth_providers
+        ):
+            raise ValueError("Each OAuth provider client ID and secret must be configured together")
+        if any(client_id is not None for client_id, _ in oauth_providers):
+            if (
+                self.oauth_public_api_base_url is None
+                or not self.oauth_dashboard_origins
+                or self.oauth_session_signing_key is None
+                or self.oauth_token_encryption_key is None
+            ):
+                raise ValueError(
+                    "OAuth providers require the public API URL, allowed dashboard origins, "
+                    "session signing key, and token encryption key"
+                )
+            if len(self.oauth_session_signing_key.encode("utf-8")) < 32:
+                raise ValueError("OAuth session signing key must be at least 32 bytes")
+            parsed = urlsplit(self.oauth_public_api_base_url)
+            local_http = parsed.scheme == "http" and parsed.hostname in {
+                "localhost",
+                "127.0.0.1",
+                "::1",
+            }
+            if (
+                (parsed.scheme != "https" and not local_http)
+                or not parsed.netloc
+                or parsed.query
+                or parsed.fragment
+                or parsed.username is not None
+                or parsed.password is not None
+            ):
+                raise ValueError(
+                    "OAuth public API URL must use HTTPS and must not contain credentials, "
+                    "a query, or a fragment"
+                )
         return self
 
     @field_validator("notes_search_allowed_targets")
@@ -187,6 +290,18 @@ class Settings(BaseModel):
                 ).split(",")
                 if target.strip()
             ),
+            google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID"),
+            google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET"),
+            github_app_client_id=os.getenv("GITHUB_APP_CLIENT_ID"),
+            github_app_client_secret=os.getenv("GITHUB_APP_CLIENT_SECRET"),
+            oauth_public_api_base_url=os.getenv("CORTEXSTONE_OAUTH_PUBLIC_API_URL"),
+            oauth_dashboard_origins=tuple(
+                origin.strip()
+                for origin in os.getenv("CORTEXSTONE_OAUTH_DASHBOARD_ORIGINS", "").split(",")
+                if origin.strip()
+            ),
+            oauth_session_signing_key=os.getenv("CORTEXSTONE_OAUTH_SESSION_SIGNING_KEY"),
+            oauth_token_encryption_key=os.getenv("CORTEXSTONE_OAUTH_TOKEN_ENCRYPTION_KEY"),
             auth_issuer=os.getenv("CORTEXSTONE_AUTH_ISSUER"),
             auth_audience=os.getenv("CORTEXSTONE_AUTH_AUDIENCE"),
             auth_jwks_url=os.getenv("CORTEXSTONE_AUTH_JWKS_URL"),

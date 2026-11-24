@@ -51,16 +51,51 @@ describe('live mode', () => {
     expect(fetchMock.mock.calls.map(([input]) => String(input)).sort()).toEqual(['/api/v1/me', '/health', '/ready']);
     expect(result.ok && result.data.principal).toEqual({ id: 'user-1', display_name: 'Operator', authenticated: true });
   });
-  it('does not call connector and notes routes that the backend has not registered', async () => {
+  it('calls registered Calendar routes and keeps unavailable Notes routes explicit', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([]), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     const live = createApi('live', '');
+    const calendar = await live.listCalendarEvents('2026-10-25T00:00:00+05:30', '2026-11-01T00:00:00+05:30', 'Asia/Kolkata');
     const results = await Promise.all([
-      live.listCalendarEvents('2026-10-25T00:00:00+05:30', '2026-11-01T00:00:00+05:30', 'Asia/Kolkata'),
       live.listNotes(), live.createNote('Title', 'Body'), live.updateNote('note 1', 'Updated', 'Body 2'), live.deleteNote('note 1'),
     ]);
     expect(results.every((result) => !result.ok && result.kind === 'unavailable')).toBe(true);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(calendar).toEqual({ ok: true, data: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v1/google-calendar/events?');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('time_zone=Asia%2FKolkata');
+  });
+  it('sends Calendar write idempotency keys and preserves approval-required responses', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      status: 'approval_required', approval_id: 'approval-1', expires_at: '2026-10-30T12:00:00Z',
+    }), { status: 202 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const live = createApi('live', '', 'normal', 'session-token');
+    const payload = {
+      summary: 'Review', start: '2026-10-30T09:00:00Z', end: '2026-10-30T10:00:00Z',
+      time_zone: 'Asia/Kolkata',
+    };
+    const result = await live.createCalendarEvent(payload, 'create-1');
+    expect(result).toMatchObject({ ok: true, data: { status: 'approval_required', approval_id: 'approval-1' } });
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/google-calendar/events', expect.objectContaining({
+      method: 'POST',
+      headers: expect.objectContaining({
+        Authorization: 'Bearer session-token',
+        'Idempotency-Key': 'create-1',
+      }),
+    }));
+  });
+  it('simulates Calendar create, update, and delete with normalized event data', async () => {
+    const mock = createApi('mock', '');
+    const created = await mock.createCalendarEvent({
+      summary: 'Review', start: '2026-10-30T09:00:00Z', end: '2026-10-30T10:00:00Z',
+      time_zone: 'Asia/Kolkata',
+    }, 'create-1');
+    expect(created.ok && created.data).toMatchObject({ summary: 'Review', timezone: 'Asia/Kolkata' });
+    if (!created.ok || 'status' in created.data) return;
+    const updated = await mock.updateCalendarEvent(created.data.id, { summary: 'Revised' }, 'update-1');
+    expect(updated.ok && updated.data).toMatchObject({ summary: 'Revised', timezone: 'Asia/Kolkata' });
+    expect((await mock.deleteCalendarEvent(created.data.id, 'delete-1')).ok).toBe(true);
   });
   it('does not call GitHub connector routes that the backend has not registered', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify([]), { status: 200 }));

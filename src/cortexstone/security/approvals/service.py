@@ -23,6 +23,7 @@ class ApprovalStatus(StrEnum):
     REJECTED = "rejected"
     EXPIRED = "expired"
     REVOKED = "revoked"
+    CONSUMED = "consumed"
 
 
 class ApprovalConflictError(Exception):
@@ -59,6 +60,23 @@ class SqlAlchemyApprovalService:
         now = datetime.now(UTC)
         action_hash = PolicyEngine.action_hash(action)
         async with self._session_factory() as session, session.begin():
+            existing = await session.scalar(
+                select(ApprovalModel)
+                .where(
+                    ApprovalModel.owner_id == owner_id,
+                    ApprovalModel.action_hash == action_hash,
+                    ApprovalModel.target_ref == action.target_ref,
+                    ApprovalModel.status.in_(
+                        [ApprovalStatus.PENDING.value, ApprovalStatus.APPROVED.value]
+                    ),
+                    ApprovalModel.expires_at > now,
+                )
+                .order_by(ApprovalModel.created_at.desc(), ApprovalModel.id)
+                .limit(1)
+                .with_for_update()
+            )
+            if existing is not None:
+                return self._record(existing)
             approval = ApprovalModel(
                 owner_id=owner_id,
                 action_hash=action_hash,
@@ -216,14 +234,36 @@ class SqlAlchemyApprovalService:
                 return None
             if expired:
                 await session.flush()
+            elif approval.status == ApprovalStatus.APPROVED.value:
+                approval.status = ApprovalStatus.CONSUMED.value
+                approval.decided_at = datetime.now(UTC)
+                approval.decided_by = principal.principal_id
+                session.add(
+                    self._audit_event(
+                        event_type="approval.consumed",
+                        actor_id=principal.principal_id,
+                        subject_id=principal.principal_id,
+                        resource_id=approval.id,
+                        details={
+                            "tool_name": approval.tool_name,
+                            "target_ref": approval.target_ref,
+                            "action_hash": approval.action_hash,
+                        },
+                    )
+                )
+                await session.flush()
             return ApprovalEvidence(
                 approved=approval.status
-                in {ApprovalStatus.APPROVED.value, ApprovalStatus.EXPIRED.value},
+                in {
+                    ApprovalStatus.APPROVED.value,
+                    ApprovalStatus.EXPIRED.value,
+                },
                 action_hash=approval.action_hash,
                 target_ref=approval.target_ref,
                 expires_at=approval.expires_at,
                 principal_id=approval.owner_id,
-                revoked=approval.status == ApprovalStatus.REVOKED.value,
+                revoked=approval.status
+                in {ApprovalStatus.REVOKED.value, ApprovalStatus.CONSUMED.value},
             )
 
     @classmethod

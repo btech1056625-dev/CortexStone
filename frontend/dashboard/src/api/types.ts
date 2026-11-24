@@ -52,7 +52,14 @@ export interface GitHubRepository { full_name: string; name: string; owner: stri
 export interface GitHubIssue { number: number; title: string; state: string; html_url?: string; created_at?: string }
 export interface GitHubPullRequest extends GitHubIssue { draft?: boolean; head_ref?: string; base_ref?: string }
 export interface GitHubWorkflowRun { id: number | string; name: string; status: string; conclusion: string | null; created_at: string; html_url?: string }
-export interface CalendarEvent { id: string; summary: string; start: string; end: string; timezone: string }
+export interface CalendarEvent { id: string; summary: string | null; start: string; end: string; timezone: string | null }
+export type OAuthProvider = 'google' | 'github';
+export interface OAuthProviders { providers: OAuthProvider[] }
+export interface OAuthConnection { provider: OAuthProvider; connected: boolean; display_name: string | null; scopes: string[]; expires_at: string | null }
+export interface CalendarWriteApproval { status: 'approval_required'; approval_id: string; expires_at: string }
+export type CalendarWriteResult = CalendarEvent | CalendarWriteApproval;
+export interface CalendarEventCreate { summary: string; start: string; end: string; time_zone: string }
+export interface CalendarEventUpdate { summary?: string; start?: string; end?: string; time_zone?: string }
 export interface Note { id: string; title: string; content: string; created_at: string; updated_at: string }
 
 export type Feature = 'health' | 'chat' | 'actions' | 'memory' | 'jobs' | 'guardian' | 'integrations';
@@ -71,10 +78,19 @@ export interface Api {
   listJobs(): Promise<Result<JobRecord[]>>;
   listFindings(): Promise<Result<Finding[]>>;
   listGithubRepos(): Promise<Result<GitHubRepository[]>>;
+  getGithubIssue(repository: string, issueNumber: number): Promise<Result<GitHubIssue>>;
   listGithubIssues(repo: string): Promise<Result<GitHubIssue[]>>;
   listGithubPulls(repo: string): Promise<Result<GitHubPullRequest[]>>;
   listGithubRuns(repo: string): Promise<Result<GitHubWorkflowRun[]>>;
   listCalendarEvents(start: string, end: string, timezone: string): Promise<Result<CalendarEvent[]>>;
+  createCalendarEvent(event: CalendarEventCreate, idempotencyKey: string): Promise<Result<CalendarWriteResult>>;
+  updateCalendarEvent(id: string, event: CalendarEventUpdate, idempotencyKey: string): Promise<Result<CalendarWriteResult>>;
+  deleteCalendarEvent(id: string, idempotencyKey: string): Promise<Result<void | CalendarWriteApproval>>;
+  oauthProviders(): Promise<Result<OAuthProviders>>;
+  oauthConnections(): Promise<Result<OAuthConnection[]>>;
+  connectOAuthProvider(provider: OAuthProvider, returnOrigin: string): Promise<Result<{ authorization_url: string }>>;
+  disconnectOAuthProvider(provider: OAuthProvider): Promise<Result<void>>;
+  decideApproval(id: string, decision: 'approved' | 'rejected'): Promise<Result<unknown>>;
   listNotes(): Promise<Result<Note[]>>;
   createNote(title: string, content: string): Promise<Result<Note>>;
   updateNote(id: string, title: string, content: string): Promise<Result<Note>>;

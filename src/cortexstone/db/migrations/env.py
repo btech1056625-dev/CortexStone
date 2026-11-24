@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 import cortexstone.db.models.action_runs  # noqa: F401
 import cortexstone.db.models.approvals  # noqa: F401
 import cortexstone.db.models.memory  # noqa: F401
+import cortexstone.db.models.oauth  # noqa: F401
 import cortexstone.db.models.permissions  # noqa: F401
 from cortexstone.db.base import Base
 from cortexstone.db.session import async_database_url

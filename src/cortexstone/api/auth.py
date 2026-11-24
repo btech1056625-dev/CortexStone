@@ -1,7 +1,23 @@
 """OIDC bearer-token verification and authenticated user identity."""
 
-from jwt import PyJWKClient, PyJWKClientConnectionError, PyJWKClientError, PyJWTError, decode
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import uuid4
+
+from jwt import (
+    PyJWKClient,
+    PyJWKClientConnectionError,
+    PyJWKClientError,
+    PyJWTError,
+    decode,
+    encode,
+)
 from pydantic import BaseModel, ConfigDict
+
+SESSION_TOKEN_PREFIX = "cs1."
+SESSION_TOKEN_ISSUER = "cortexstone"
+SESSION_TOKEN_AUDIENCE = "cortexstone-api"
+SESSION_TOKEN_TTL = timedelta(hours=1)
 
 
 class AuthenticatedUser(BaseModel):
@@ -52,6 +68,49 @@ class OIDCAuthenticator:
                 audience=self._audience,
                 issuer=self._issuer,
                 options={"require": ["exp", "sub"]},
+            )
+        except PyJWTError as exc:
+            raise InvalidBearerToken from exc
+
+        subject = claims.get("sub")
+        if not isinstance(subject, str) or not subject.strip():
+            raise InvalidBearerToken
+        display_name = claims.get("name")
+        if not isinstance(display_name, str) or not display_name.strip():
+            display_name = subject
+        return AuthenticatedUser(subject=subject, display_name=display_name)
+
+
+class SessionTokenAuthenticator:
+    """Issue and verify short-lived API sessions created by a completed OAuth login."""
+
+    def __init__(self, signing_key: str) -> None:
+        self._signing_key = signing_key
+
+    def issue(self, user: AuthenticatedUser) -> str:
+        now = datetime.now(UTC)
+        claims: dict[str, Any] = {
+            "iss": SESSION_TOKEN_ISSUER,
+            "aud": SESSION_TOKEN_AUDIENCE,
+            "sub": user.subject,
+            "name": user.display_name,
+            "iat": now,
+            "exp": now + SESSION_TOKEN_TTL,
+            "jti": uuid4().hex,
+        }
+        return SESSION_TOKEN_PREFIX + encode(claims, self._signing_key, algorithm="HS256")
+
+    def authenticate(self, token: str) -> AuthenticatedUser:
+        if not token.startswith(SESSION_TOKEN_PREFIX):
+            raise InvalidBearerToken
+        try:
+            claims = decode(
+                token[len(SESSION_TOKEN_PREFIX) :],
+                self._signing_key,
+                algorithms=["HS256"],
+                audience=SESSION_TOKEN_AUDIENCE,
+                issuer=SESSION_TOKEN_ISSUER,
+                options={"require": ["exp", "iat", "sub"]},
             )
         except PyJWTError as exc:
             raise InvalidBearerToken from exc

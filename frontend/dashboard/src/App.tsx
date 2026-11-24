@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Brain, FileCheck2, LayoutDashboard, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Plug, Search, Settings as Cog, ShieldAlert, Workflow } from 'lucide-react';
+import { Brain, FileCheck2, Github, LayoutDashboard, Menu, MessageSquare, PanelLeftClose, PanelLeftOpen, Plug, Search, Settings as Cog, ShieldAlert, Workflow } from 'lucide-react';
 import { API_BASE, HealthProvider, api, overall, useHealth } from './app-context';
 import type { DataMode, DemoScenario, Feature } from './api/types';
 import { Badge, Banner, Empty } from './ui';
@@ -10,6 +10,7 @@ import Actions from './pages/Actions';
 import Memory from './pages/Memory';
 import Jobs from './pages/Jobs';
 import Guardian from './pages/Guardian';
+import ConnectedIntegrations from './pages/ConnectedIntegrations';
 import Integrations from './pages/Integrations';
 import { ToastProvider } from './toast';
 import { config } from './config';
@@ -50,6 +51,19 @@ function UnavailablePage({ title, paths }: { title: string; paths: string[] }) {
 function SettingsPage() {
   const { snap, mode, scenario, setMode, accessToken, setAccessToken } = useHealth();
   const [tokenDraft, setTokenDraft] = useState(accessToken);
+  const [oauthProviders, setOauthProviders] = useState<('google' | 'github')[]>([]);
+  const [oauthMessage, setOauthMessage] = useState('');
+  const [oauthPending, setOauthPending] = useState(false);
+  const [oauthProvider, setOauthProvider] = useState<'google' | 'github' | null>(null);
+  useEffect(() => {
+    if (mode !== 'live') {
+      setOauthProviders([]);
+      return;
+    }
+    void api.oauthProviders().then((result) => {
+      if (result.ok) setOauthProviders(result.data.providers);
+    });
+  }, [mode]);
   const rows: [string, React.ReactNode][] = [
     ['Data mode', mode === 'live' ? 'Live backend' : 'Simulated sandbox'],
     ['API base URL', API_BASE ? <code>{API_BASE}</code> : <span>Same origin (Vite proxy)</span>],
@@ -58,8 +72,66 @@ function SettingsPage() {
     ['API token', mode === 'live' ? accessToken ? 'In memory for this tab' : 'Not provided' : 'Not used in sandbox mode.'],
     ['Scenario', mode === 'mock' ? scenario : 'Scenarios are available in sandbox mode only.'],
   ];
+  function signInWith(provider: 'google' | 'github') {
+    const returnOrigin = location.origin;
+    const query = new URLSearchParams({ return_origin: returnOrigin });
+    const popupUrl = `${API_BASE}/api/v1/oauth/${provider}/login?${query}`;
+    const configuredCallbackOrigin = import.meta.env.VITE_OAUTH_API_ORIGIN as string | undefined;
+    const callbackOrigin = configuredCallbackOrigin ? new URL(configuredCallbackOrigin).origin
+      : (API_BASE ? new URL(API_BASE).origin : location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+        ? 'http://localhost:8000' : location.origin);
+    const popup = window.open(popupUrl, `cortexstone-${provider}-login`, 'popup,width=520,height=680');
+    if (!popup) {
+      setOauthMessage('Allow popups to continue OAuth sign-in.');
+      return;
+    }
+    setOauthPending(true);
+    setOauthProvider(provider);
+    setOauthMessage('');
+    const finish = (message: string) => {
+      window.removeEventListener('message', receive);
+      clearTimeout(timeout);
+      setOauthPending(false);
+      setOauthProvider(null);
+      setOauthMessage(message);
+      popup.close();
+    };
+    const receive = (event: MessageEvent<{
+      type?: string; provider?: string; mode?: string; session_token?: string;
+    }>) => {
+      if (event.source !== popup || event.origin !== callbackOrigin) return;
+      if (event.data?.type === 'cortexstone-oauth-success'
+        && event.data.provider === provider && event.data.mode === 'login'
+        && typeof event.data.session_token === 'string') {
+        setAccessToken(event.data.session_token);
+        finish(`Signed in with ${provider === 'google' ? 'Google' : 'GitHub'}.`);
+      } else if (event.data?.type === 'cortexstone-oauth-error') {
+        finish('OAuth sign-in was not completed.');
+      }
+    };
+    const timeout = window.setTimeout(() => {
+      window.removeEventListener('message', receive);
+      setOauthPending(false);
+      setOauthProvider(null);
+      setOauthMessage('OAuth sign-in timed out. Please try again.');
+      popup.close();
+    }, 120_000);
+    window.addEventListener('message', receive);
+  }
   return <div className="page"><div className="head"><div><h1>Settings</h1><p>Connection and account status for this dashboard.</p></div></div>
     <section className="panel"><div className="scroll"><table><tbody>{rows.map(([key, value]) => <tr key={key}><th scope="row" style={{ width: 200 }}>{key}</th><td>{value}</td></tr>)}</tbody></table></div></section>
+    {mode === 'live' && <section className="panel">
+      <div className="body form">
+        <div className="field full"><strong>Sign in with a provider</strong>
+          <small className="muted">Google sign-in also connects Calendar event access. GitHub sign-in connects your GitHub identity; repository access requires the configured GitHub App.</small>
+        </div>
+        <div className="row">
+          <button className="btn" onClick={() => signInWith('google')} disabled={oauthPending || !oauthProviders.includes('google')}><span aria-hidden>G</span>{oauthPending && oauthProvider === 'google' ? 'Connecting…' : 'Continue with Google'}</button>
+          <button className="btn" onClick={() => signInWith('github')} disabled={oauthPending || !oauthProviders.includes('github')}><Github size={16} />{oauthPending && oauthProvider === 'github' ? 'Connecting…' : 'Continue with GitHub'}</button>
+          {oauthMessage && <span role="status" className="muted">{oauthMessage}</span>}
+        </div>
+      </div>
+    </section>}
     <Banner title="Identity is server-side">The API derives identity from verified credentials. This dashboard never sends a user id or stores provider credentials.</Banner>
     {mode === 'live' && <section className="panel"><form className="body form" onSubmit={(event) => { event.preventDefault(); setAccessToken(tokenDraft.trim()); }}>
       <div className="field full"><label htmlFor="api-token">OIDC access token</label><input id="api-token" type="password" autoComplete="off" value={tokenDraft} onChange={(event) => setTokenDraft(event.target.value)} placeholder="Paste a valid API bearer token" />
@@ -71,8 +143,12 @@ function SettingsPage() {
 }
 
 function Page({ route }: { route: string }) {
-  if (route === 'integrations') return api.support.integrations === 'unavailable'
-    ? <UnavailablePage title="Integrations" paths={['GitHub connector routes', 'Calendar connector routes', 'Notes routes']} /> : <Integrations />;
+  if (route === 'integrations') {
+    if (api.support.integrations === 'unavailable') {
+      return <UnavailablePage title="Integrations" paths={['GitHub connector routes', 'Calendar connector routes', 'Notes routes']} />;
+    }
+    return api.mode === 'mock' ? <Integrations /> : <ConnectedIntegrations />;
+  }
   const u = UNAVAILABLE[route];
   if (u) return api.support[u.feature] === 'unavailable' ? <UnavailablePage title={u.title} paths={u.paths} /> : route === 'jobs' ? <Jobs /> : <Guardian />;
   switch (route) {

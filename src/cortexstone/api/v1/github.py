@@ -8,8 +8,8 @@ from cortexstone.agent.schemas.actions import ProposedAction
 from cortexstone.api.auth import AuthenticatedUser
 from cortexstone.api.dependencies import (
     get_authenticated_user,
+    get_github_tool_runner,
     get_policy_principal,
-    get_tool_runner,
 )
 from cortexstone.security.policy import PolicyPrincipal
 from cortexstone.tools.connectors.github import (
@@ -18,7 +18,7 @@ from cortexstone.tools.connectors.github import (
     GitHubIssueNotFoundError,
     GitHubProviderError,
 )
-from cortexstone.tools.runner import ToolExecutionDenied, ToolRunner
+from cortexstone.tools.runner import ToolExecutionDenied, ToolNotRegisteredError, ToolRunner
 
 router = APIRouter(prefix="/github", tags=["github"])
 
@@ -33,7 +33,7 @@ async def read_issue(
     issue_number: Annotated[int, Path(ge=1)],
     user: Annotated[AuthenticatedUser, Depends(get_authenticated_user)],
     principal: Annotated[PolicyPrincipal, Depends(get_policy_principal)],
-    tool_runner: Annotated[ToolRunner, Depends(get_tool_runner)],
+    tool_runner: Annotated[ToolRunner, Depends(get_github_tool_runner)],
 ) -> GitHubIssue:
     """Read one issue only through current server policy and registered executor."""
     if principal.principal_id != user.subject:
@@ -54,6 +54,11 @@ async def read_issue(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="GitHub issue access is not permitted.",
+        ) from None
+    except ToolNotRegisteredError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Connect a GitHub account with access to this repository.",
         ) from None
     except GitHubIssueNotFoundError:
         raise HTTPException(

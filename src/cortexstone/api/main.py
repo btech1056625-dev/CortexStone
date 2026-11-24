@@ -16,13 +16,15 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cortexstone.agent.models.interface import ModelError, ModelSchemaValidationError
 from cortexstone.agent.models.split import SplitModelClient
-from cortexstone.api.auth import OIDCAuthenticator
+from cortexstone.api.auth import OIDCAuthenticator, SessionTokenAuthenticator
 from cortexstone.api.config import Settings
 from cortexstone.api.dependencies import build_policy_engine
 from cortexstone.api.v1.approvals import router as approvals_router
 from cortexstone.api.v1.chat import router as chat_router
 from cortexstone.api.v1.github import router as github_router
+from cortexstone.api.v1.google_calendar import router as google_calendar_router
 from cortexstone.api.v1.memories import router as memory_router
+from cortexstone.api.v1.oauth import router as oauth_router
 from cortexstone.api.v1.permissions import router as permissions_router
 from cortexstone.api.v1.router import operational_router
 from cortexstone.api.v1.router import router as v1_router
@@ -31,6 +33,7 @@ from cortexstone.memory.embeddings.bge import BGEEmbeddingProvider
 from cortexstone.memory.embeddings.config import EmbeddingError
 from cortexstone.security.action_runs.service import SqlAlchemyActionRunService
 from cortexstone.security.approvals.service import SqlAlchemyApprovalService
+from cortexstone.security.oauth import OAuthService
 from cortexstone.security.permissions.service import SqlAlchemyPermissionService
 from cortexstone.security.redaction import configure_redacting_logging
 from cortexstone.tools.connectors.github import GITHUB_ISSUE_READ_TOOL, GitHubIssueReader
@@ -62,24 +65,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             jwks_url=configured_settings.auth_jwks_url,
         )
 
+    session_authenticator = (
+        SessionTokenAuthenticator(configured_settings.oauth_session_signing_key)
+        if configured_settings.oauth_session_signing_key is not None
+        else None
+    )
+    oauth_http_client: httpx.AsyncClient | None = None
+    oauth_service: OAuthService | None = None
+    has_oauth_provider = any(
+        (
+            configured_settings.google_oauth_client_id,
+            configured_settings.github_app_client_id,
+        )
+    )
+    if has_oauth_provider and session_factory is not None and session_authenticator is not None:
+        oauth_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0, connect=3.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            follow_redirects=False,
+        )
+        oauth_service = OAuthService(
+            configured_settings,
+            session_factory,
+            oauth_http_client,
+            session_authenticator,
+        )
+
     github_http_client: httpx.AsyncClient | None = None
+    google_calendar_http_client: httpx.AsyncClient | None = None
     github_issue_reader: GitHubIssueReader | None = None
     tool_executors: dict[str, ToolExecutor] = {}
-    if (
+    if configured_settings.github_issue_read_allowed_targets and (
         configured_settings.github_token is not None
-        and configured_settings.github_issue_read_allowed_targets
+        or configured_settings.github_app_client_id is not None
     ):
         github_http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=3.0),
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
             follow_redirects=False,
         )
-        github_issue_reader = GitHubIssueReader(
-            token=configured_settings.github_token,
-            allowed_repositories=configured_settings.github_issue_read_allowed_targets,
-            client=github_http_client,
+        if configured_settings.github_token is not None:
+            github_issue_reader = GitHubIssueReader(
+                token=configured_settings.github_token,
+                allowed_repositories=configured_settings.github_issue_read_allowed_targets,
+                client=github_http_client,
+            )
+            tool_executors[GITHUB_ISSUE_READ_TOOL] = github_issue_reader
+    if configured_settings.google_oauth_client_id is not None:
+        google_calendar_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0, connect=3.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            follow_redirects=False,
         )
-        tool_executors[GITHUB_ISSUE_READ_TOOL] = github_issue_reader
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
@@ -88,6 +125,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             if github_http_client is not None:
                 await github_http_client.aclose()
+            if oauth_http_client is not None:
+                await oauth_http_client.aclose()
+            if google_calendar_http_client is not None:
+                await google_calendar_http_client.aclose()
             if engine is not None:
                 await engine.dispose()
 
@@ -104,8 +145,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.db_engine = engine
     application.state.db_session_factory = session_factory
     application.state.authenticator = authenticator
+    application.state.session_authenticator = session_authenticator
+    application.state.oauth_service = oauth_service
     application.state.github_http_client = github_http_client
     application.state.github_issue_reader = github_issue_reader
+    application.state.google_calendar_http_client = google_calendar_http_client
     application.state.tool_executors = tool_executors
     application.state.memory_embedding_provider = BGEEmbeddingProvider()
     application.state.model_client = (
@@ -135,7 +179,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.policy_engine = build_policy_engine(
         configured_settings.notes_search_allowed_targets,
         github_issue_read_allowed_targets=(configured_settings.github_issue_read_allowed_targets),
-        github_enabled=configured_settings.github_token is not None,
+        github_enabled=(
+            configured_settings.github_token is not None
+            or configured_settings.github_app_client_id is not None
+        ),
+        google_calendar_enabled=configured_settings.google_oauth_client_id is not None,
         async_permission_service=permission_service,
     )
 
@@ -143,7 +191,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.add_middleware(
             CORSMiddleware,
             allow_origins=list(configured_settings.cors_allowed_origins),
-            allow_methods=["GET", "POST", "DELETE"],
+            allow_methods=["GET", "POST", "PATCH", "DELETE"],
             allow_headers=["Authorization", "Content-Type"],
             allow_credentials=False,
         )
@@ -161,6 +209,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(chat_router, prefix="/api/v1")
     application.include_router(memory_router, prefix="/api/v1")
     application.include_router(github_router, prefix="/api/v1")
+    application.include_router(google_calendar_router, prefix="/api/v1")
+    application.include_router(oauth_router, prefix="/api/v1")
     application.include_router(permissions_router, prefix="/api/v1")
     application.include_router(approvals_router, prefix="/api/v1")
 

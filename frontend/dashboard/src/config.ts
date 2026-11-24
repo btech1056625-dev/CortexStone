@@ -11,7 +11,9 @@ export const API_PATHS = {
   validateAction: '/api/v1/actions/validate',
   memories: '/api/v1/memories',
   githubRepos: '/api/v1/connectors/github/repos',
-  calendarEvents: '/api/v1/connectors/calendar/events',
+  calendarEvents: '/api/v1/google-calendar/events',
+  oauthProviders: '/api/v1/oauth/providers',
+  oauthConnections: '/api/v1/oauth/connections',
   notes: '/api/v1/notes',
 } as const;
 

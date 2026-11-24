@@ -15,9 +15,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt import PyJWKClient
 
 from cortexstone.api.auth import (
+    AuthenticatedUser,
     AuthenticationProviderUnavailable,
     InvalidBearerToken,
     OIDCAuthenticator,
+    SessionTokenAuthenticator,
 )
 from cortexstone.api.config import Settings
 from cortexstone.api.dependencies import get_chat_service, get_memory_service
@@ -200,6 +202,25 @@ def test_oidc_authenticator_reports_jwks_connection_failure(key_pair):
 
     with pytest.raises(AuthenticationProviderUnavailable):
         authenticator.authenticate("token")
+
+
+def test_oauth_session_token_authenticates_the_issued_principal():
+    authenticator = SessionTokenAuthenticator("a" * 32)
+    user = AuthenticatedUser(subject="google:account-1", display_name="Calendar User")
+
+    token = authenticator.issue(user)
+
+    assert token.startswith("cs1.")
+    assert authenticator.authenticate(token) == user
+
+
+def test_oauth_session_token_rejects_another_signing_key():
+    token = SessionTokenAuthenticator("a" * 32).issue(
+        AuthenticatedUser(subject="github:account-1", display_name="GitHub User")
+    )
+
+    with pytest.raises(InvalidBearerToken):
+        SessionTokenAuthenticator("b" * 32).authenticate(token)
 
 
 def test_oidc_authentication_protects_current_user_endpoint(key_pair):

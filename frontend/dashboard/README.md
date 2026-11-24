@@ -35,7 +35,7 @@ docker compose up --build --wait   # repo root; API on :8000
 curl localhost:8000/health
 ```
 
-Protected API routes require a valid OIDC bearer token. Paste a valid token into Settings for the current tab; it stays in page memory and is cleared on reload. The API validates identity server-side; the dashboard does not invent an identity or put secrets in public environment variables.
+Protected API routes accept either a configured OIDC bearer token or a short-lived session issued after Google/GitHub OAuth sign-in. OAuth sessions and provider credentials remain in page memory/server-side encrypted storage respectively; reloading the tab clears the session. Set `VITE_OAUTH_API_ORIGIN` only when the API callback origin differs from `VITE_API_BASE_URL` (for example with the local Vite proxy).
 
 ## What is real
 
@@ -46,7 +46,9 @@ Protected API routes require a valid OIDC bearer token. Paste a valid token into
 | Overview approvals and activity | Not available (no endpoint) | Simulated |
 | Chat | Live (`POST /api/v1/chat`) | Simulated |
 | Memory (list, create, filter, forget) | Live (`/api/v1/memories`) | Simulated, create/forget persist for the session |
-| GitHub, Google Calendar, Cortexstone Notes | Not registered on the backend; shown unavailable and not called | Simulated data |
+| Google Calendar | Per-user OAuth; primary-calendar event reads and write operations through policy and one-time approval | Simulated data |
+| GitHub | OAuth sign-in and GitHub App account connection; issue reads only for configured repositories | Simulated data |
+| Cortexstone Notes | Not registered on the backend; shown unavailable and not called | Simulated data |
 | Jobs, Guardian | Not available (no routes) | Simulated; Guardian scanning is disabled with an explanation |
 | Settings | Connection details | Mode details |
 
@@ -56,5 +58,7 @@ Protected API routes require a valid OIDC bearer token. Paste a valid token into
 - All server and model text is rendered as plain text; the codebase has no `innerHTML`.
 - Action arguments are held in memory only. The sole browser-storage use is the sidebar-collapsed preference.
 - Destructive actions (forget) use a confirmation dialog and block duplicate submission.
-- GitHub and Calendar have no write or provider connection controls in this MVP. Notes are the only built-in CRUD connector.
+- OAuth callback origins are checked against the exact configured dashboard allowlist. The browser never receives provider client secrets or stored provider tokens.
+- Calendar writes require a current policy grant and one-time approval; create operations require an `Idempotency-Key`.
+- GitHub App access should be limited to Issues read-only and selected repositories. The API also enforces its exact repository allowlist.
 - The API enables CORS only for explicit origins configured in `CORTEXSTONE_CORS_ORIGINS`; wildcards are rejected. Use the Vite dev proxy for local development.

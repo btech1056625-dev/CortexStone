@@ -18,7 +18,7 @@ class ApprovalModel(Base):
     __tablename__ = "approvals"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'approved', 'rejected', 'expired', 'revoked')",
+            "status IN ('pending', 'approved', 'rejected', 'expired', 'revoked', 'consumed')",
             name="status_valid",
         ),
         Index("ix_approvals_owner_created", "owner_id", "created_at"),
