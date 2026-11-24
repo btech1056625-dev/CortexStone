@@ -484,6 +484,48 @@ def test_permission_service_failures_fail_closed():
     assert decision.reason == PolicyReason.SERVICE_ERROR
 
 
+def test_async_permission_service_is_queried_for_each_evaluation():
+    class MutablePermissionService:
+        def __init__(self):
+            self.grants = PRINCIPAL.grants
+            self.calls = 0
+
+        async def get_grants(self, principal_id: str):
+            assert principal_id == PRINCIPAL.principal_id
+            self.calls += 1
+            return self.grants
+
+    permission_service = MutablePermissionService()
+    engine = PolicyEngine([READ_TOOL], async_permission_service=permission_service)
+    action = make_action()
+
+    async def evaluate_twice():
+        allowed = await engine.evaluate_async(PRINCIPAL, action)
+        permission_service.grants = ()
+        revoked = await engine.evaluate_async(PRINCIPAL, action)
+        return allowed, revoked
+
+    allowed, revoked = asyncio.run(evaluate_twice())
+
+    assert allowed.status == PolicyStatus.ALLOW
+    assert revoked.status == PolicyStatus.DENY
+    assert revoked.reason == PolicyReason.PERMISSION_MISSING
+    assert permission_service.calls == 2
+
+
+def test_async_permission_service_failures_fail_closed():
+    class FailingPermissionService:
+        async def get_grants(self, principal_id: str):
+            raise RuntimeError("permission database unavailable")
+
+    engine = PolicyEngine([READ_TOOL], async_permission_service=FailingPermissionService())
+
+    decision = asyncio.run(engine.evaluate_async(PRINCIPAL, make_action()))
+
+    assert decision.status == PolicyStatus.DENY
+    assert decision.reason == PolicyReason.SERVICE_ERROR
+
+
 # Part 5: Model Trust Boundary Tests
 
 

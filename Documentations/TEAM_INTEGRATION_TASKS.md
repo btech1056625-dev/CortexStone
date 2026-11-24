@@ -1,6 +1,8 @@
 # Cortexstone — Team Integration Tasks & Workstreams
 
-> **Status:** Phase 1 (Days 1–2 Scaffolding & Model Core) Complete  
+> **Status:** Phase 1 (Days 1–2 Scaffolding & Model Core) Complete
+>
+> **Provider update (24 November 2026):** The active implementation uses Groq for routing and Google AI Studio for reasoning. The NVIDIA/Nebius examples below are historical task guidance and remain superseded by the environment variables and provider adapters in the repository.
 > **Prepared by:** Archis Samanta (ML/DL — Agents Core)  
 > **Target Audience:** All 8 Cortexstone team members  
 > **Core Invariant:** *The model proposes; the backend policy decides; the restricted runner executes; verification establishes the result.*

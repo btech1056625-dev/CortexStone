@@ -19,8 +19,10 @@ from cortexstone.application.chat.service import ChatService
 from cortexstone.application.memory.service import MemoryService
 from cortexstone.db.session import get_db_session as yield_db_session
 from cortexstone.memory.repositories.memory_repo import SqlAlchemyMemoryRepository
+from cortexstone.security.permissions.service import SqlAlchemyPermissionService
 from cortexstone.security.policy import (
     ActionScope,
+    AsyncPermissionService,
     PolicyEngine,
     PolicyPrincipal,
     RiskLevel,
@@ -46,6 +48,17 @@ async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]
 def get_policy_engine(request: Request) -> PolicyEngine:
     """Resolve the application-scoped policy engine."""
     return request.app.state.policy_engine
+
+
+def get_permission_service(request: Request) -> SqlAlchemyPermissionService:
+    """Resolve durable permission management, failing if persistence is unavailable."""
+    permission_service = request.app.state.permission_service
+    if permission_service is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Permission storage is not configured.",
+        )
+    return permission_service
 
 
 def get_model_client(request: Request) -> ModelClient:
@@ -129,7 +142,11 @@ def get_chat_service(
     return ChatService(memory_service=memory_service, agent=agent)
 
 
-def build_policy_engine(allowed_targets: tuple[str, ...]) -> PolicyEngine:
+def build_policy_engine(
+    allowed_targets: tuple[str, ...],
+    *,
+    async_permission_service: AsyncPermissionService | None = None,
+) -> PolicyEngine:
     """Create policies from validated server configuration."""
     policies = []
     if allowed_targets:
@@ -143,4 +160,4 @@ def build_policy_engine(allowed_targets: tuple[str, ...]) -> PolicyEngine:
                 optional_arguments=frozenset({"limit"}),
             )
         )
-    return PolicyEngine(policies)
+    return PolicyEngine(policies, async_permission_service=async_permission_service)

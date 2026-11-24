@@ -19,8 +19,8 @@ T = TypeVar("T", bound=BaseModel)
 class ModelRole(enum.StrEnum):
     """Identifies the operational tier for model routing."""
 
-    ROUTER = "router"  # Nemotron Mini: Intent classification & complexity routing
-    REASONER = "reasoner"  # Nemotron 3 Super 120B A12B: Complex reasoning and planning
+    ROUTER = "router"  # Fast provider: intent classification and complexity routing
+    REASONER = "reasoner"  # Stronger provider: complex reasoning and planning
 
 
 class Role(enum.StrEnum):

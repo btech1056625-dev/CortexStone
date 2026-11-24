@@ -9,8 +9,9 @@ import httpx
 import pytest
 
 from cortexstone.agent.models import MockModelClient
-from cortexstone.agent.models.interface import ModelSchemaValidationError
+from cortexstone.agent.models.interface import ModelRole, ModelSchemaValidationError
 from cortexstone.agent.schemas.actions import ProposedAction
+from cortexstone.agent.schemas.routing import ComplexityLevel, IntentCategory, RouteDecision
 from cortexstone.api.auth import AuthenticatedUser
 from cortexstone.api.dependencies import (
     get_authenticated_user,
@@ -97,9 +98,17 @@ def test_chat_retrieves_owner_context_filters_and_returns_validated_response():
     other_owner.item.owner_id = "another-subject"
     deleted = memory_result("Deleted memory must not be sent.", deleted=True)
     model_client = MockModelClient(
-        parsed_fixture={
-            "conversation_id": "model-controlled-id",
-            "answer": "We chose PostgreSQL.",
+        parsed_fixtures={
+            ModelRole.ROUTER: RouteDecision(
+                intent=IntentCategory.MEMORY_RECALL,
+                complexity=ComplexityLevel.MEDIUM,
+                needs_reasoner=True,
+                rationale="The user is asking about stored project history.",
+            ),
+            ModelRole.REASONER: {
+                "conversation_id": "model-controlled-id",
+                "answer": "We chose PostgreSQL.",
+            },
         }
     )
     application, memory_service = make_chat_app(
@@ -132,12 +141,20 @@ def test_chat_retrieves_owner_context_filters_and_returns_validated_response():
     assert search_call["sensitivity"] == SensitivityLevel.NORMAL
     assert search_call["top_k"] == 5
 
-    user_content = model_client.recorded_calls[0]["messages"][1].content
+    assert [call["schema"].__name__ for call in model_client.recorded_calls] == [
+        "RouteDecision",
+        "ChatResult",
+    ]
+    assert [call["model_id"] for call in model_client.recorded_calls] == [
+        "mock-router",
+        "mock-reasoner",
+    ]
+    user_content = model_client.recorded_calls[1]["messages"][1].content
     assert "We chose PostgreSQL for the service." in user_content
     assert "[Source: user:chat-test," in user_content
     assert "[INFERRED]" in user_content
     assert "Approved skill may be sent." in user_content
-    system_content = model_client.recorded_calls[0]["messages"][0].content
+    system_content = model_client.recorded_calls[1]["messages"][0].content
     assert (
         "Cite each recalled fact using its exact source reference and timestamp." in system_content
     )
@@ -146,6 +163,75 @@ def test_chat_retrieves_owner_context_filters_and_returns_validated_response():
     assert "Unapproved skill must not be sent." not in user_content
     assert "Another owner's memory must not be sent." not in user_content
     assert "Deleted memory must not be sent." not in user_content
+
+
+def test_chat_routes_simple_direct_chat_to_router_provider():
+    model_client = MockModelClient(
+        parsed_fixtures={
+            ModelRole.ROUTER: {
+                "RouteDecision": RouteDecision(
+                    intent=IntentCategory.DIRECT_CHAT,
+                    complexity=ComplexityLevel.LOW,
+                    needs_reasoner=False,
+                    rationale="This is a simple conversational request.",
+                ),
+                "ChatResult": {"answer": "Hello from Groq."},
+            },
+            ModelRole.REASONER: {"answer": "This answer should not be used."},
+        }
+    )
+    application, _ = make_chat_app([], model_client)
+
+    async def send_request() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application),
+            base_url="http://testserver",
+        ) as client:
+            return await client.post("/api/v1/chat", json={"message": "Hello"})
+
+    response = asyncio.run(send_request())
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Hello from Groq."
+    assert [call["model_id"] for call in model_client.recorded_calls] == [
+        "mock-router",
+        "mock-router",
+    ]
+    assert [call["schema"].__name__ for call in model_client.recorded_calls] == [
+        "RouteDecision",
+        "ChatResult",
+    ]
+
+
+def test_chat_routes_complex_direct_chat_to_reasoner_provider():
+    model_client = MockModelClient(
+        parsed_fixtures={
+            ModelRole.ROUTER: RouteDecision(
+                intent=IntentCategory.DIRECT_CHAT,
+                complexity=ComplexityLevel.HIGH,
+                needs_reasoner=False,
+                rationale="The request needs complex reasoning despite being conversational.",
+            ),
+            ModelRole.REASONER: {"answer": "Reasoned answer."},
+        }
+    )
+    application, _ = make_chat_app([], model_client)
+
+    async def send_request() -> httpx.Response:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application),
+            base_url="http://testserver",
+        ) as client:
+            return await client.post("/api/v1/chat", json={"message": "Explain a complex topic"})
+
+    response = asyncio.run(send_request())
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Reasoned answer."
+    assert [call["model_id"] for call in model_client.recorded_calls] == [
+        "mock-router",
+        "mock-reasoner",
+    ]
 
 
 def test_chat_returns_bad_gateway_when_model_response_is_not_parsed():
@@ -242,15 +328,23 @@ def test_chat_fails_closed_without_authentication():
 
 def test_chat_returns_only_typed_unexecuted_action_proposals():
     model_client = MockModelClient(
-        parsed_fixture={
-            "proposed_actions": [
-                {
-                    "tool_name": "notes.search",
-                    "target_ref": "notes/personal",
-                    "arguments": {"query": "deployment plan"},
-                    "purpose": "Find the user's deployment plan.",
-                }
-            ]
+        parsed_fixtures={
+            ModelRole.ROUTER: RouteDecision(
+                intent=IntentCategory.TOOL_ACTION,
+                complexity=ComplexityLevel.MEDIUM,
+                needs_reasoner=True,
+                rationale="The request involves proposing a tool action.",
+            ),
+            ModelRole.REASONER: {
+                "proposed_actions": [
+                    {
+                        "tool_name": "notes.search",
+                        "target_ref": "notes/personal",
+                        "arguments": {"query": "deployment plan"},
+                        "purpose": "Find the user's deployment plan.",
+                    }
+                ]
+            },
         }
     )
     application, _ = make_chat_app([], model_client)
@@ -269,7 +363,11 @@ def test_chat_returns_only_typed_unexecuted_action_proposals():
     action = ProposedAction.model_validate(action_data)
     assert action.tool_name == "notes.search"
     assert action.target_ref == "notes/personal"
-    assert model_client.recorded_calls[0]["schema"].__name__ == "ChatResult"
+    assert [call["model_id"] for call in model_client.recorded_calls] == [
+        "mock-router",
+        "mock-reasoner",
+    ]
+    assert model_client.recorded_calls[-1]["schema"].__name__ == "ChatResult"
 
 
 def test_chat_rejects_principal_that_does_not_match_verified_identity():

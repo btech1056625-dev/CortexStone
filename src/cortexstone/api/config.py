@@ -17,13 +17,16 @@ class Settings(BaseModel):
     database_url: str | None = Field(default=None, repr=False)
     notes_search_allowed_targets: tuple[str, ...] = ()
     cors_allowed_origins: tuple[str, ...] = ()
-    nebius_api_key: str | None = Field(default=None, repr=False)
-    nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1"
-    nebius_router_model_id: str = "nvidia/nemotron-mini-4b-instruct"
-    nebius_reasoner_model_id: str = "nvidia/nemotron-3-super-120b-a12b"
+    groq_api_key: str | None = Field(default=None, repr=False)
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_router_model_id: str = "llama-3.3-70b-versatile"
+    google_api_key: str | None = Field(default=None, repr=False)
+    google_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    google_reasoner_model_id: str = "gemini-2.5-flash"
     auth_issuer: str | None = None
     auth_audience: str | None = None
     auth_jwks_url: str | None = None
+    permission_admin_subjects: tuple[str, ...] = ()
 
     @field_validator("database_url")
     @classmethod
@@ -41,13 +44,13 @@ class Settings(BaseModel):
         value = value.strip()
         return value or None
 
-    @field_validator("nebius_api_key")
+    @field_validator("groq_api_key", "google_api_key")
     @classmethod
-    def validate_nebius_api_key(cls, value: str | None) -> str | None:
+    def validate_model_api_key(cls, value: str | None) -> str | None:
         if value is None:
             return None
         value = value.strip()
-        if value == "your_nebius_api_key_here":
+        if value.startswith("your_") and value.endswith("_api_key_here"):
             return None
         return value or None
 
@@ -77,6 +80,15 @@ class Settings(BaseModel):
         if len(set(targets)) != len(targets):
             raise ValueError("Configured policy targets must be unique")
         return targets
+
+    @field_validator("permission_admin_subjects")
+    @classmethod
+    def validate_permission_admin_subjects(cls, subjects: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not subject or subject != subject.strip() for subject in subjects):
+            raise ValueError("Permission administrator subjects must be non-empty and trimmed")
+        if len(set(subjects)) != len(subjects):
+            raise ValueError("Permission administrator subjects must be unique")
+        return subjects
 
     @field_validator("cors_allowed_origins")
     @classmethod
@@ -108,24 +120,34 @@ class Settings(BaseModel):
         targets = tuple(target.strip() for target in raw_targets.split(",") if target.strip())
         raw_origins = os.getenv("CORTEXSTONE_CORS_ORIGINS", "")
         origins = tuple(origin.strip() for origin in raw_origins.split(",") if origin.strip())
+        raw_permission_admins = os.getenv("CORTEXSTONE_PERMISSION_ADMIN_SUBJECTS", "")
+        permission_admin_subjects = tuple(
+            subject.strip() for subject in raw_permission_admins.split(",") if subject.strip()
+        )
         return cls(
             database_url=database_url,
             notes_search_allowed_targets=targets,
             cors_allowed_origins=origins,
-            nebius_api_key=os.getenv("NEBIUS_API_KEY"),
-            nebius_base_url=os.getenv(
-                "NEBIUS_BASE_URL",
-                "https://api.tokenfactory.nebius.com/v1",
+            groq_api_key=os.getenv("GROQ_API_KEY"),
+            groq_base_url=os.getenv(
+                "GROQ_BASE_URL",
+                "https://api.groq.com/openai/v1",
             ),
-            nebius_router_model_id=os.getenv(
-                "NEBIUS_ROUTER_MODEL_ID",
-                "nvidia/nemotron-mini-4b-instruct",
+            groq_router_model_id=os.getenv(
+                "GROQ_ROUTER_MODEL_ID",
+                "llama-3.3-70b-versatile",
             ),
-            nebius_reasoner_model_id=os.getenv(
-                "NEBIUS_REASONER_MODEL_ID",
-                "nvidia/nemotron-3-super-120b-a12b",
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            google_base_url=os.getenv(
+                "GOOGLE_BASE_URL",
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+            ),
+            google_reasoner_model_id=os.getenv(
+                "GOOGLE_REASONER_MODEL_ID",
+                "gemini-2.5-flash",
             ),
             auth_issuer=os.getenv("CORTEXSTONE_AUTH_ISSUER"),
             auth_audience=os.getenv("CORTEXSTONE_AUTH_AUDIENCE"),
             auth_jwks_url=os.getenv("CORTEXSTONE_AUTH_JWKS_URL"),
+            permission_admin_subjects=permission_admin_subjects,
         )

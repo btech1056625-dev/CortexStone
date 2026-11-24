@@ -6,7 +6,14 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 
 from cortexstone.agent.schemas.actions import ProposedAction
 from cortexstone.memory.schemas import MemoryItemCreate, MemoryItemRead, MemoryKind
-from cortexstone.security.policy import PolicyDecision, PolicyReason, PolicyStatus, RiskLevel
+from cortexstone.security.permissions.service import PermissionGrantRecord
+from cortexstone.security.policy import (
+    ActionScope,
+    PolicyDecision,
+    PolicyReason,
+    PolicyStatus,
+    RiskLevel,
+)
 
 ChatMessage = Annotated[
     str,
@@ -145,3 +152,62 @@ class ActionValidationResponse(BaseModel):
             action_hash=decision.action_hash,
             risk=decision.risk,
         )
+
+
+class PermissionGrantCreateRequest(BaseModel):
+    """Admin-issued permission bound to a registered tool policy."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    principal_id: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    tool_name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    scope: ActionScope
+    allowed_targets: tuple[
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)],
+        ...,
+    ] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_unique_targets(self) -> "PermissionGrantCreateRequest":
+        if len(set(self.allowed_targets)) != len(self.allowed_targets):
+            raise ValueError("Permission targets must be unique.")
+        return self
+
+
+class PermissionGrantResponse(BaseModel):
+    """Persisted permission state without sensitive action data."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    id: str
+    principal_id: str
+    tool_name: str
+    scope: ActionScope
+    allowed_targets: tuple[str, ...]
+    granted_by: str
+    created_at: AwareDatetime
+    revoked_at: AwareDatetime | None
+    revoked_by: str | None
+
+    @classmethod
+    def from_record(cls, record: PermissionGrantRecord) -> "PermissionGrantResponse":
+        return cls(
+            id=str(record.id),
+            principal_id=record.principal_id,
+            tool_name=record.tool_name,
+            scope=record.scope,
+            allowed_targets=record.allowed_targets,
+            granted_by=record.granted_by,
+            created_at=record.created_at,
+            revoked_at=record.revoked_at,
+            revoked_by=record.revoked_by,
+        )
+
+
+class PrincipalRevocationResponse(BaseModel):
+    """Count of active grants revoked for an offboarded or changed principal."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    principal_id: str
+    revoked_count: int

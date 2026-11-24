@@ -9,7 +9,7 @@ apps/                 API application plus worker and scheduler placeholders
 src/cortexstone/      Product package: API, application, domain, adapters, and infrastructure
 frontend/dashboard/   React/Vite dashboard with live API mode and explicit demo mode
 tests/                Unit, integration, security, reliability, and shared fixtures
-deploy/               Local composition, container, and Nebius deployment assets
+deploy/               Local composition, container, and hosted-deployment assets
 docs/                 Architecture notes, threat model, and operational runbooks
 Documentations/       Product requirements, system design, and team rules
 ```

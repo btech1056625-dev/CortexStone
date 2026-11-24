@@ -31,10 +31,12 @@ class MockModelClient(ModelClient):
         self,
         fixed_text: str = "Mock model response",
         parsed_fixture: Any = None,
+        parsed_fixtures: dict[ModelRole, Any] | None = None,
         simulate_error: Exception | None = None,
     ) -> None:
         self.fixed_text = fixed_text
         self.parsed_fixture = parsed_fixture
+        self.parsed_fixtures = parsed_fixtures or {}
         self.simulate_error = simulate_error
         self.recorded_calls: list[dict[str, Any]] = []
 
@@ -81,12 +83,26 @@ class MockModelClient(ModelClient):
             }
         )
 
+        role = {
+            "mock-router": ModelRole.ROUTER,
+            "mock-reasoner": ModelRole.REASONER,
+        }.get(model_id)
+        role_fixture = self.parsed_fixtures.get(role, self.parsed_fixture)
+        fixture = role_fixture
+        if (
+            role is not None
+            and role in self.parsed_fixtures
+            and isinstance(role_fixture, dict)
+            and schema is not None
+            and schema.__name__ in role_fixture
+        ):
+            fixture = role_fixture[schema.__name__]
         parsed: T | None = None
-        if schema is not None and self.parsed_fixture is not None:
-            if isinstance(self.parsed_fixture, schema):
-                parsed = self.parsed_fixture
-            elif isinstance(self.parsed_fixture, dict):
-                parsed = schema.model_validate(self.parsed_fixture)
+        if schema is not None and fixture is not None:
+            if isinstance(fixture, schema):
+                parsed = fixture
+            elif isinstance(fixture, dict):
+                parsed = schema.model_validate(fixture)
 
         return ModelResponse(
             raw_content=self.fixed_text,

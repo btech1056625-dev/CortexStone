@@ -1,7 +1,7 @@
 """
 src/cortexstone/agent/schemas/routing.py
 
-Schemas for intent classification and complexity routing powered by Nemotron Mini.
+Schemas for intent classification and complexity routing by the configured router model.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class ComplexityLevel(enum.StrEnum):
 
 
 class RouteDecision(BaseModel):
-    """Structured routing outcome emitted by Nemotron Mini."""
+    """Structured routing outcome emitted by the configured router model."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -40,7 +40,7 @@ class RouteDecision(BaseModel):
         description="Complexity assessment for resource allocation and bounded planning"
     )
     needs_reasoner: bool = Field(
-        description="True if Nemotron 3 Super 120B must be invoked for multi-step reasoning"
+        description="True if the configured reasoning model must be invoked"
     )
     extracted_entities: list[str] = Field(
         default_factory=list,

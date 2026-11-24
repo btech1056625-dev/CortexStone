@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from cortexstone.agent.schemas.actions import ProposedAction
 from cortexstone.api.config import Settings
-from cortexstone.api.dependencies import get_policy_principal
+from cortexstone.api.dependencies import build_policy_engine, get_policy_principal
 from cortexstone.api.main import create_app
 from cortexstone.security.policy import (
     ActionScope,
@@ -100,6 +100,47 @@ def test_action_validation_denies_missing_grant(configured_app):
     assert response.json()["reason"] == "permission_missing"
     assert response.json()["risk"] == "low"
     assert response.json()["action_hash"] is None
+
+
+def test_action_validation_uses_live_async_grants(configured_app):
+    class MutablePermissionService:
+        grants = (
+            PermissionGrant(
+                tool_name="notes.search",
+                scope=ActionScope.READ,
+                allowed_targets=frozenset({"notes/personal"}),
+            ),
+        )
+
+        async def get_grants(self, principal_id: str):
+            assert principal_id == "test-user"
+            return self.grants
+
+    permission_service = MutablePermissionService()
+    configured_app.state.policy_engine = build_policy_engine(
+        ("notes/personal",),
+        async_permission_service=permission_service,
+    )
+    configured_app.dependency_overrides[get_policy_principal] = lambda: PolicyPrincipal(
+        principal_id="test-user",
+        grants=(),
+    )
+    payload = {
+        "action": {
+            "tool_name": "notes.search",
+            "target_ref": "notes/personal",
+            "arguments": {"query": "project"},
+            "purpose": "Find project notes",
+        }
+    }
+
+    allowed = request(configured_app, payload)
+    permission_service.grants = ()
+    revoked = request(configured_app, payload)
+
+    assert allowed.json()["status"] == "allow"
+    assert revoked.json()["status"] == "deny"
+    assert revoked.json()["reason"] == "permission_missing"
 
 
 def test_action_validation_fails_closed_without_authentication(configured_app):

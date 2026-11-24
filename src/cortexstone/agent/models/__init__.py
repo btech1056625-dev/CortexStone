@@ -19,6 +19,8 @@ from cortexstone.agent.models.interface import (
 )
 from cortexstone.agent.models.mock import MockModelClient
 from cortexstone.agent.models.nebius import NebiusTokenFactoryClient
+from cortexstone.agent.models.openai_compatible import OpenAICompatibleClient
+from cortexstone.agent.models.split import SplitModelClient
 
 __all__ = [
     "MockModelClient",
@@ -32,6 +34,8 @@ __all__ = [
     "ModelSchemaValidationError",
     "ModelTimeoutError",
     "NebiusTokenFactoryClient",
+    "OpenAICompatibleClient",
+    "SplitModelClient",
     "Role",
     "UsageMetadata",
 ]

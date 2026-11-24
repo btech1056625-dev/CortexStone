@@ -11,7 +11,7 @@ from cortexstone.agent.models.interface import (
 )
 from cortexstone.agent.orchestration.router import IntentRouter
 from cortexstone.agent.schemas.actions import AgentPlan, ProposedAction
-from cortexstone.agent.schemas.routing import RouteDecision
+from cortexstone.agent.schemas.routing import IntentCategory, RouteDecision
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +52,52 @@ class AgentOrchestrator:
             timeout=timeout,
         )
 
+    async def generate_chat_response(
+        self,
+        user_message: str,
+        messages: list[ModelMessage],
+        schema: type[T],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        timeout: float = 30.0,
+    ) -> ModelResponse[T]:
+        """Route simple conversation to Groq and reasoning work to Google."""
+        route = await self.router.route(user_message)
+        role = (
+            ModelRole.ROUTER
+            if (
+                route.intent == IntentCategory.DIRECT_CHAT
+                and route.complexity == "low"
+                and not route.needs_reasoner
+            )
+            else ModelRole.REASONER
+        )
+        logger.debug(
+            "Chat routed to %s (intent=%s, complexity=%s)",
+            role.value,
+            route.intent.value,
+            route.complexity.value,
+        )
+        return await self.generate_structured_response(
+            role=role,
+            messages=messages,
+            schema=schema,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+
     async def run(self, user_message: str, context: list[dict[str, Any]]) -> list[ProposedAction]:
 
-        # Step 1: Fast triage via Nemotron Mini Router
+        # Step 1: Fast triage via the configured routing model
         try:
             route: RouteDecision = await self.router.route(user_message)
         except Exception as e:
             logger.error(f"Router failed: {e}. Defaulting to safe fallback.")
             route = RouteDecision(intent="clarification", needs_reasoner=False, complexity="low")
 
-        # Step 2: Dispatch to Nemotron 3 Super 120B Reasoner
+        # Step 2: Dispatch to the configured reasoning model
         # Only triggers if router says needs_reasoner OR intent is tool_action
         if route.needs_reasoner or route.intent == "tool_action":
             messages = self._build_messages(user_message, context)

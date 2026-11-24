@@ -5,6 +5,7 @@ import httpx
 import pytest
 from fastapi import HTTPException
 
+from cortexstone.agent.models.split import SplitModelClient
 from cortexstone.api.config import Settings
 from cortexstone.api.dependencies import get_db_session
 from cortexstone.api.main import create_app
@@ -93,6 +94,22 @@ def test_database_url_is_loaded_from_environment(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/test")
 
     assert Settings.from_environment().database_url == "postgresql://localhost/test"
+
+
+def test_app_configures_groq_router_without_google_reasoner_key():
+    application = create_app(
+        Settings(
+            groq_api_key="groq-test-key",
+            groq_router_model_id="test-router",
+            google_reasoner_model_id="test-reasoner",
+        )
+    )
+    model_client = application.state.model_client
+
+    assert isinstance(model_client, SplitModelClient)
+    assert model_client.router.model_id == "test-router"
+    assert model_client.router.provider_name == "Groq"
+    assert model_client.reasoner is None
 
 
 def test_cors_origins_are_loaded_and_applied_to_preflight(monkeypatch):

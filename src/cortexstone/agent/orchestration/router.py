@@ -1,7 +1,7 @@
 """
 src/cortexstone/agent/orchestration/router.py
 
-Intent and complexity router powered by Nemotron Mini.
+Intent and complexity router powered by the configured routing model.
 Delivered by Archis Samanta (ML/DL — Agents Core) for Cortexstone.
 """
 
@@ -28,7 +28,7 @@ logger = logging.getLogger("cortexstone.agent.orchestration.router")
 
 class IntentRouter:
     """
-    Coordinates Nemotron Mini to classify incoming requests and determine complexity.
+    Coordinates the configured routing model to classify incoming requests.
     """
 
     def __init__(
@@ -41,7 +41,7 @@ class IntentRouter:
 
     async def route(self, user_message: str) -> RouteDecision:
         """
-        Analyze a user query using Nemotron Mini and return a typed RouteDecision.
+        Analyze a user query using the configured routing model.
         """
         if not user_message or not user_message.strip():
             return RouteDecision(

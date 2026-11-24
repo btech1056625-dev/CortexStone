@@ -14,17 +14,19 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cortexstone.agent.models.interface import ModelError, ModelSchemaValidationError
-from cortexstone.agent.models.nebius import NebiusTokenFactoryClient
+from cortexstone.agent.models.split import SplitModelClient
 from cortexstone.api.auth import OIDCAuthenticator
 from cortexstone.api.config import Settings
 from cortexstone.api.dependencies import build_policy_engine
 from cortexstone.api.v1.chat import router as chat_router
 from cortexstone.api.v1.memories import router as memory_router
+from cortexstone.api.v1.permissions import router as permissions_router
 from cortexstone.api.v1.router import operational_router
 from cortexstone.api.v1.router import router as v1_router
 from cortexstone.db.session import create_engine_from_url, create_session_factory
 from cortexstone.memory.embeddings.bge import BGEEmbeddingProvider
 from cortexstone.memory.embeddings.config import EmbeddingError
+from cortexstone.security.permissions.service import SqlAlchemyPermissionService
 
 logger = logging.getLogger(__name__)
 
@@ -74,17 +76,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.authenticator = authenticator
     application.state.memory_embedding_provider = BGEEmbeddingProvider()
     application.state.model_client = (
-        NebiusTokenFactoryClient(
-            api_key=configured_settings.nebius_api_key,
-            base_url=configured_settings.nebius_base_url,
-            router_model_id=configured_settings.nebius_router_model_id,
-            reasoner_model_id=configured_settings.nebius_reasoner_model_id,
+        SplitModelClient(
+            groq_api_key=configured_settings.groq_api_key,
+            groq_model_id=configured_settings.groq_router_model_id,
+            google_api_key=configured_settings.google_api_key,
+            google_model_id=configured_settings.google_reasoner_model_id,
+            groq_base_url=configured_settings.groq_base_url,
+            google_base_url=configured_settings.google_base_url,
         )
-        if configured_settings.nebius_api_key is not None
+        if configured_settings.groq_api_key is not None
         else None
     )
+    permission_service = (
+        SqlAlchemyPermissionService(session_factory) if session_factory is not None else None
+    )
+    application.state.permission_service = permission_service
     application.state.policy_engine = build_policy_engine(
-        configured_settings.notes_search_allowed_targets
+        configured_settings.notes_search_allowed_targets,
+        async_permission_service=permission_service,
     )
 
     if configured_settings.cors_allowed_origins:
@@ -108,6 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(v1_router, prefix="/api/v1")
     application.include_router(chat_router, prefix="/api/v1")
     application.include_router(memory_router, prefix="/api/v1")
+    application.include_router(permissions_router, prefix="/api/v1")
 
     @application.exception_handler(StarletteHTTPException)
     async def handle_http_error(

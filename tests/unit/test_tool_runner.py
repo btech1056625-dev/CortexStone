@@ -214,3 +214,46 @@ def test_runner_checks_policy_before_executor_registry():
 
     with pytest.raises(ToolNotRegisteredError):
         run(runner.execute(PRINCIPAL, READ_ACTION))
+
+
+def test_runner_rechecks_persisted_permissions_before_executor():
+    class RevokingPermissionService:
+        def __init__(self) -> None:
+            self.calls = 0
+            self.revoked = False
+
+        async def get_grants(self, principal_id: str):
+            self.calls += 1
+            return () if self.revoked else PRINCIPAL.grants
+
+    service = RevokingPermissionService()
+    engine = PolicyEngine(
+        [
+            ToolPolicy(
+                tool_name="notes.search",
+                scope=ActionScope.READ,
+                risk=RiskLevel.LOW,
+                allowed_targets=frozenset({"notes/personal"}),
+                required_arguments=frozenset({"query"}),
+            )
+        ],
+        async_permission_service=service,
+    )
+    executed = False
+
+    async def executor(_action: ProposedAction):
+        nonlocal executed
+        executed = True
+
+    runner = ToolRunner(engine, {"notes.search": executor})
+
+    async def preflight_then_revoke() -> None:
+        assert (await engine.evaluate_async(PRINCIPAL, READ_ACTION)).status == PolicyStatus.ALLOW
+        service.revoked = True
+        with pytest.raises(ToolExecutionDenied):
+            await runner.execute(PRINCIPAL, READ_ACTION)
+
+    run(preflight_then_revoke())
+
+    assert service.calls == 2
+    assert not executed

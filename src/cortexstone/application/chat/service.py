@@ -1,6 +1,6 @@
 """Chat application flow: trusted identity, bounded context, and validated model output."""
 
-from cortexstone.agent.models.interface import ModelMessage, ModelRole, Role
+from cortexstone.agent.models.interface import ModelMessage, Role
 from cortexstone.agent.orchestration.orchestrator import AgentOrchestrator
 from cortexstone.application.chat.schemas import ChatResult, ChatTurn
 from cortexstone.application.memory.service import MemoryService
@@ -72,8 +72,8 @@ class ChatService:
             max_items=MAX_MEMORY_RESULTS,
             max_context_chars=MAX_MEMORY_CONTEXT_CHARS,
         )
-        response = await self._agent.generate_structured_response(
-            role=ModelRole.REASONER,
+        response = await self._agent.generate_chat_response(
+            user_message=turn.message,
             messages=[
                 ModelMessage(role=Role.SYSTEM, content=CHAT_SYSTEM_PROMPT),
                 ModelMessage(

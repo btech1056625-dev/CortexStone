@@ -61,7 +61,7 @@ class ToolRunner:
         if self._approval_resolver is not None:
             approval = await self._approval_resolver(principal, action)
 
-        decision = self._policy_engine.evaluate(principal, action, approval=approval)
+        decision = await self._policy_engine.evaluate_async(principal, action, approval=approval)
         if decision.status != PolicyStatus.ALLOW:
             raise ToolExecutionDenied(decision)
 

@@ -167,6 +167,18 @@ class PermissionService(Protocol):
         ...
 
 
+@runtime_checkable
+class AsyncPermissionService(Protocol):
+    """Protocol for asynchronous, uncached permission lookup."""
+
+    async def get_grants(
+        self,
+        principal_id: str,
+    ) -> Sequence[PermissionGrant]:
+        """Retrieve the principal's current active grants."""
+        ...
+
+
 class PolicyEngine:
     """Evaluate proposed actions against server policy and trusted grants."""
 
@@ -176,6 +188,7 @@ class PolicyEngine:
         *,
         approval_service: ApprovalService | None = None,
         permission_service: PermissionService | None = None,
+        async_permission_service: AsyncPermissionService | None = None,
     ) -> None:
         self._tool_policies: dict[str, ToolPolicy] = {}
         for policy in tool_policies:
@@ -184,6 +197,48 @@ class PolicyEngine:
             self._tool_policies[policy.tool_name] = policy
         self._approval_service = approval_service
         self._permission_service = permission_service
+        self._async_permission_service = async_permission_service
+
+    def get_tool_policy(self, tool_name: str) -> ToolPolicy | None:
+        """Return the immutable server-owned policy for a registered tool."""
+        return self._tool_policies.get(tool_name)
+
+    async def evaluate_async(
+        self,
+        principal: PolicyPrincipal,
+        action: ProposedAction,
+        *,
+        approval: ApprovalEvidence | None = None,
+        now: datetime | None = None,
+    ) -> PolicyDecision:
+        """Evaluate using an uncached async grant lookup when one is configured."""
+        if self._async_permission_service is None:
+            return self.evaluate(principal, action, approval=approval, now=now)
+
+        if (
+            principal is None
+            or not isinstance(principal, PolicyPrincipal)
+            or not principal.authenticated
+            or not principal.principal_id.strip()
+        ):
+            return self.evaluate(principal, action, approval=approval, now=now)
+
+        try:
+            grants = await self._async_permission_service.get_grants(principal.principal_id)
+        except Exception:
+            logger.exception("Async permission service failure during evaluation")
+            return PolicyDecision(PolicyStatus.DENY, PolicyReason.SERVICE_ERROR)
+
+        resolved_principal = PolicyPrincipal(
+            principal_id=principal.principal_id,
+            grants=tuple(grants),
+            authenticated=principal.authenticated,
+        )
+        evaluator = PolicyEngine(
+            self._tool_policies.values(),
+            approval_service=self._approval_service,
+        )
+        return evaluator.evaluate(resolved_principal, action, approval=approval, now=now)
 
     def evaluate(
         self,

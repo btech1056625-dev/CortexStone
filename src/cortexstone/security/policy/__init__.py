@@ -4,6 +4,7 @@ from cortexstone.security.policy.engine import (
     ActionScope,
     ApprovalEvidence,
     ApprovalService,
+    AsyncPermissionService,
     PermissionGrant,
     PermissionService,
     PolicyDecision,
@@ -17,6 +18,7 @@ from cortexstone.security.policy.engine import (
 
 __all__ = [
     "ActionScope",
+    "AsyncPermissionService",
     "ApprovalEvidence",
     "ApprovalService",
     "PermissionGrant",

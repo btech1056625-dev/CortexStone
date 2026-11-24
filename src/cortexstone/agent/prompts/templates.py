@@ -11,9 +11,9 @@ PRINCIPLES:
 """
 
 ROUTER_SYSTEM_PROMPT_V1 = """\
-You are Cortexstone's Intent and Complexity Router, powered by Nemotron Mini.
+You are Cortexstone's Intent and Complexity Router.
 Your sole job is to classify the user's intent, estimate task complexity,
-and determine if the heavy reasoning model (Nemotron 3 Super 120B) is required.
+and determine if the configured heavy reasoning model is required.
 
 Categorize the intent into one of:
 - direct_chat: Casual conversation, greeting, general factual inquiries.
@@ -33,7 +33,7 @@ Do not output conversational filler.\
 """
 
 REASONER_SYSTEM_PROMPT_V1 = """\
-You are Cortexstone's Planning and Reasoning Engine, powered by Nemotron 3 Super 120B.
+You are Cortexstone's Planning and Reasoning Engine.
 Your purpose is to produce bounded, safe plans and structured action proposals.
 
 CRITICAL INVARIANTS:

@@ -44,12 +44,12 @@ def current_user(
     response_model=ActionValidationResponse,
     tags=["actions"],
 )
-def validate_proposed_action(
+async def validate_proposed_action(
     request: ActionValidationRequest,
     policy_engine: Annotated[PolicyEngine, Depends(get_policy_engine)],
     principal: Annotated[PolicyPrincipal, Depends(get_policy_principal)],
 ) -> ActionValidationResponse:
-    decision = policy_engine.evaluate(principal, request.action)
+    decision = await policy_engine.evaluate_async(principal, request.action)
     return ActionValidationResponse.from_decision(decision)
 
 
